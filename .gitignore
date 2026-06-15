@@ -1,0 +1,12 @@
+# ซ่อนไฟล์ระบบและฐานข้อมูลเกม
+game_data.db
+*.db
+
+# ซ่อนไฟล์เก็บ Token บอท
+.env
+config.json
+
+# ซ่อนโฟลเดอร์ขยะของ Python
+__pycache__/
+*/__pycache__/
+.venv/
