@@ -1,122 +1,12 @@
-None
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import models.player_model as player_model
 from views.profile_embed import create_profile_embed
-import random  # 🌟 [เพิ่มบรรทัดนี้] เปิดทางให้บอทเรียกใช้ระบบสุ่มจับรางวัลทองชาร์ตแชท
-import time    # 🌟 [เพิ่มบรรทัดนี้] เปิดทางให้บอทคำนวณเวลาระบบ Cooldown ป้องกันคนสแปมพิมพ์
 
 class GameCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # 🟢 เริ่มรันระบบ Loop ทันทีที่ Cog ทำงาน
-        self.voice_exp_tracker.start()
-        self.chat_cooldowns = {} # ⏱️ [เพิ่มตรงนี้] คลังเก็บ Cooldown แชทของผู้เล่นบนแรม
-        
-    def cog_unload(self):
-        # 🛑 สั่งหยุดระบบ Loop เมื่อ Cog โดนรีโหลดหรือปิดบอท
-        self.voice_exp_tracker.cancel()
-
-    # ─── 🔄 ระบบสแกนแจก EXP + อัปเดตยศออโต้ในดิสคอร์ด (ทำงานทุก 1 นาที) ───
-    @tasks.loop(minutes=1.0)
-    async def voice_exp_tracker(self):
-        """Loop หลังบ้านสแกนหาผู้เล่นเพื่อแจก EXP พร้อมคิดโบนัสคูณ และแจกยศอัตโนมัติในเซิร์ฟเวอร์"""
-        for guild in self.bot.guilds:
-            for voice_channel in guild.voice_channels:
-                # 🚫 กฎความปลอดภัย: ถ้าห้องนั้นไม่มีคนอยู่ ไม่ต้องแจก
-                if len(voice_channel.members) == 0: 
-                    continue
-                    
-                for member in voice_channel.members:
-                    if member.bot: continue 
-                    if member.voice.self_deaf or member.voice.self_mute: 
-                        continue
-                    
-                    player = player_model.get_player(member.id)
-                    if not player: continue
-                        
-                    # 🟢 1. คำนวณแจก EXP ตามสูตร 3 เดือน (นาทีละ 100 EXP พื้นฐาน)
-                    base_exp = 100 
-                    p_lvl = player["level"] 
-                    
-                    multiplier = 1
-                    if p_lvl >= 80: multiplier = 5
-                    elif p_lvl >= 40: multiplier = 4
-                    elif p_lvl >= 20: multiplier = 3
-                    elif p_lvl >= 10: multiplier = 2
-                        
-                    final_gained_exp = base_exp * multiplier
-                    
-                    # บันทึก EXP เข้าฐานข้อมูล
-                    is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
-                    
-                    if is_lv_up:
-                        try:
-                            await member.send(f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมพูดคุยในห้องเสียงส่งผลให้คุณเลเวลอัปเป็น **Lv.{new_lv}** แล้วครับ!")
-                        except discord.Forbidden:
-                            pass
-                    
-                    # 🏅 2. ตรวจสอบและอัปเดตยศ (Rank)
-                    current_actual_level = new_lv if is_lv_up else p_lvl
-                    is_rank_up, new_rank = player_model.check_and_update_rank(member.id, current_actual_level)
-                    
-                    # ⚡ เมื่อแรงค์เพิ่ม สั่งแจกยศในดิสคอร์ดเซิร์ฟเวอร์อัตโนมัติ
-                    if is_rank_up:
-                        role_name = f"นักผจญภัยแรงค์ {new_rank}"
-                        role = discord.utils.get(guild.roles, name=role_name)
-                        
-                        if role:
-                            try:
-                                # ➕ มอบยศใหม่ให้กับผู้เล่น
-                                await member.add_roles(role)
-                                
-                                # 🗑️ ไล่ลบยศแรงค์เก่าออกเพื่อไม่ให้ยศรกตัวละคร
-                                all_ranks = ["F", "E", "D", "C", "B", "A", "SSS"]
-                                for r in all_ranks:
-                                    if r != new_rank:
-                                        old_role = discord.utils.get(guild.roles, name=f"นักผจญภัยแรงค์ {r}")
-                                        if old_role and old_role in member.roles:
-                                            await member.remove_roles(old_role)
-                                            
-                                # ส่งข้อความแจ้งเตือนความสำเร็จ
-                                await member.send(f"🏅 **[สมาคมนักผจญภัย]** ปรับระดับยศของคุณในเซิร์ฟเวอร์เป็น **{role_name}** เรียบร้อยแล้ว! ⚔️")
-                            except discord.Forbidden:
-                                print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ในเซิร์ฟเวอร์: {guild.name}")
-                            except Exception as e:
-                                print(f"⚠️ เกิดข้อผิดพลาดในการแจกยศ: {e}")
-                        else:
-                            print(f"⚠️ ไม่พบยศชื่อ '{role_name}' ในเซิร์ฟเวอร์ {guild.name} (กรุณาสร้างยศนี้รอไว้ในดิสคอร์ด)")
-
-    @voice_exp_tracker.before_loop
-    async def before_voice_exp_tracker(self):
-        """รอให้บอทล็อกอินและ Gateway เชื่อมต่อเสร็จร้อยเปอร์เซ็นต์ก่อนเริ่มสแกน"""
-        await self.bot.wait_until_ready()
-    
-    # ─── 💬 ระบบดักฟังช่องแชท แจกเงินเล็กน้อยเมื่อพิมพ์คุย (Text Chat Reward) ───
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author.bot or message.guild is None or message.content.startswith("!"):
-            return
-            
-        user_id = message.author.id
-        
-        # ⏱️ ตรวจสอบระบบ Cooldown แชท
-        import time
-        current_time = time.time()
-        if user_id in self.chat_cooldowns:
-            last_msg_time = self.chat_cooldowns[user_id]
-            # ถ้ายังพิมพ์ไม่เกิน 10 วินาทีนับจากครั้งล่าสุด ให้ปล่อยผ่าน ไม่แจกเงินซ้ำ
-            if current_time - last_msg_time < 10: 
-                return
-                
-        player = player_model.get_player(user_id)
-        if player:
-            gained_gold = random.randint(10, 300)
-            player_model.update_player_field(user_id, "cash", player.get("cash", 0) + gained_gold)
-            
-            # บันทึกเวลาพิมพ์ล่าสุดของผู้เล่นลงแรม
-            self.chat_cooldowns[user_id] = current_time
-            # print(f"💬 [Chat Reward] คุณ {message.author.name} ได้รับ `{gained_gold}` ทอง")
+        # 🎮 [คลีนระบบ] ถอดคำสั่งสั่งเริ่มทำงานของลูปแจก EXP และ Cooldown แชทออกทั้งหมดแล้ว (ย้ายไปโมดูลอื่นสำเร็จ)
 
     # ─── 🛒 คำสั่งเปิดร้านค้าและซื้อขายยศแบบข้อความ (!shop) ───
     @commands.command(name="shop")
@@ -125,14 +15,14 @@ class GameCommands(commands.Cog):
         player = player_model.get_player(user_id)
         
         if not player:
-            await ctx.send("❌ ไม่พบข้อมูลตัวละครของคุณ กรุณาพิมพ์ `!play` เพื่อลงทะเบียนก่อนครับ")
+            await ctx.send("❌ 不พบข้อมูลตัวละครของคุณ กรุณาพิมพ์ `!play` เพื่อลงทะเบียนก่อนครับ")
             return
 
         # 📋 คลังข้อมูลราคายศและชื่อยศในเซิร์ฟเวอร์
         shop_items = {
-            1: {"name": "ขายยศ 1", "price": 1000},
-            2: {"name": "ขายยศ 2", "price": 5000},
-            3: {"name": "ขายยศ 3", "price": 10000}
+            1: {"name": "ขายยศ 1", "price": 10000},
+            2: {"name": "ขายยศ 2", "price": 50000},
+            3: {"name": "ขายยศ 3", "price": 100000}
         }
 
         # 🛑 เคสที่ 1: พิมพ์ !shop เฉยๆ -> บอทเปิดใบรายการหน้าร้านให้ดู
@@ -141,9 +31,9 @@ class GameCommands(commands.Cog):
                 title="🛒 สมาคมนักผจญภัย - ร้านค้าตราเกียรติยศ (Text Edition)",
                 description=f"ยินดีต้อนรับคุณ **{ctx.author.name}** เข้าสู่หอเกียรติยศ\n💰 เงินคงเหลือปัจจุบัน: `{player.get('cash', 0)}` ทอง\n\n"
                             f"📌 **รายการยศที่มีวางจำหน่าย:**\n"
-                            f"🔹 **[1] ยศทดสอบ 1** — ราคา `1,000` ทอง\n"
-                            f"🔹 **[2] ยศทดสอบ 2** — ราคา `5,000` ทอง\n"
-                            f"🔹 **[3] ยศทดสอบ 3** — ราคา `10,000` ทอง\n\n"
+                            f"🔹 **[1] ยศทดสอบ 1** — ราคา `10,000` ทอง\n"
+                            f"🔹 **[2] ยศทดสอบ 2** — ราคา `50,000` ทอง\n"
+                            f"🔹 **[3] ยศทดสอบ 3** — ราคา `100,000` ทอง\n\n"
                             f"⌨️ **วิธีสั่งซื้อ:** พิมพ์คำสั่ง `!shop ซื้อ [เลขยศ]` (เช่น `!shop ซื้อ 1`)",
                 color=0xecc94b
             )
@@ -206,53 +96,56 @@ class GameCommands(commands.Cog):
         embed = create_profile_embed(target_member, player_data)
         await ctx.send(embed=embed)
 
-    # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก ───
-    @commands.command(name="play")
+    # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก (ระบบแสดงผลเฉพาะคนใช้คำสั่ง - Ephemeral) ───
+    @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
     async def play(self, ctx):
+        # 💡 ระบบ Hybrid Command จะรองรับทั้งการพิมพ์ !play และ /play 
+        # และเปิดทางให้ใช้คำสั่ง ctx.send(..., ephemeral=True) เพื่อซ่อนข้อความได้ทันทีครับ
+        
         user_id = ctx.author.id
         player = player_model.get_player(user_id)
         
+        # 🚫 [ระบบความปลอดภัยคนเล่นใหม่] ดักเช็กเผื่อไม่มีข้อมูลใน DB ให้ระบบแจ้งลงทะเบียนก่อน
+        if not player:
+            await ctx.send("❌ **ไม่พบข้อมูลตัวละครของคุณ!** กรุณาลงทะเบียนสร้างตัวละครก่อนครับ", ephemeral=True)
+            return
+
         # 🟢 [ระบบดักเช็กยศออโต้] พิมพ์ !play ปุ๊บ ตรวจสอบแรงค์ตามเวลปัจจุบันทันที (ยศเก่าไม่ลบ)
-        if player:
-            current_level = player.get("level", 1)
-            # สั่งให้โมเดลคำนวณและอัปเดตแรงค์ใน DB ให้ถูกต้องก่อน
-            _, current_rank = player_model.check_and_update_rank(user_id, current_level)
-            
-            guild = ctx.guild
-            member = ctx.author
-            
-            if guild and isinstance(member, discord.Member):
-                # ฟังก์ชันสแกนเลเวลเพื่อหาว่าควรได้รับแรงค์ไหนบ้างในตัว
-                def get_eligible_ranks(lvl):
-                    eligible = ["F"] # เลเวล 1 ได้แรงค์ F แน่นอน
-                    if lvl >= 5: eligible.append("E")
-                    if lvl >= 10: eligible.append("D")
-                    if lvl >= 20: eligible.append("C")
-                    if lvl >= 50: eligible.append("B")
-                    if lvl >= 80: eligible.append("A")
-                    if lvl >= 100: eligible.append("SSS")
-                    return eligible
+        current_level = player.get("level", 1)
+        _, current_rank = player_model.check_and_update_rank(user_id, current_level)
+        
+        guild = ctx.guild
+        member = ctx.author
+        
+        if guild and isinstance(member, discord.Member):
+            def get_eligible_ranks(lvl):
+                eligible = ["F"]
+                if lvl >= 5: eligible.append("E")
+                if lvl >= 10: eligible.append("D")
+                if lvl >= 20: eligible.append("C")
+                if lvl >= 50: eligible.append("B")
+                if lvl >= 80: eligible.append("A")
+                if lvl >= 100: eligible.append("SSS")
+                return eligible
 
-                eligible_ranks = get_eligible_ranks(current_level)
-                roles_to_add = []
+            eligible_ranks = get_eligible_ranks(current_level)
+            roles_to_add = []
 
-                # วนลูปตรวจสอบ ถ้าในดิสคอร์ดยังไม่มีแรงค์ที่ควรมี ให้จับใส่ลิสต์เตรียมแอดเพิ่ม
-                for r in eligible_ranks:
-                    role_name = f"นักผจญภัยแรงค์ {r}"
-                    role = discord.utils.get(guild.roles, name=role_name)
-                    if role and role not in member.roles:
-                        roles_to_add.append(role)
+            for r in eligible_ranks:
+                role_name = f"นักผจญภัยแรงค์ {r}"
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role and role not in member.roles:
+                    roles_to_add.append(role)
 
-                # ถ้ามียศที่ยังขาดอยู่ สั่งแจกเพิ่มเข้าไปรวดเดียว
-                if roles_to_add:
-                    try:
-                        await member.add_roles(*roles_to_add)
-                        role_names_str = ", ".join([r.name for r in roles_to_add])
-                        print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
-                    except discord.Forbidden:
-                        print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
-                    except Exception as e:
-                        print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
+            if roles_to_add:
+                try:
+                    await member.add_roles(*roles_to_add)
+                    role_names_str = ", ".join([r.name for r in roles_to_add])
+                    print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
+                except discord.Forbidden:
+                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
+                except Exception as e:
+                    print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
 
         # 🛑 [กฎเหล็ก] ถ้าอยู่ในสถานะต่อสู้/ตาย และเลือดหมดตัว (HP <= 0) บังคับสเตตัสเข้าลูปตายเกิดใหม่ทันที
         if player["current_state"] in ["fighting", "dead"] or player["hp"] <= 0:
@@ -264,10 +157,11 @@ class GameCommands(commands.Cog):
                 color=0xe53e3e
             )
             from views.game_views import RespawnView
-            await ctx.send(embed=embed, view=RespawnView(user_id))
+            # ส่งแผงเกิดใหม่แบบซ่อนข้อความเห็นคนเดียว
+            await ctx.send(embed=embed, view=RespawnView(user_id), ephemeral=True)
             return 
 
-        # 🚶 กรณีติดสถานะเลือก Choice อื่นๆ ค้างเฉยๆ (เลือดยังเหลือ) เคลียร์สเตตัสกลับมาเริ่มเดินใหม่ได้
+        # 🚶 กรณีติดสถานะเลือก Choice อื่นๆ ค้างเฉยๆ เคลียร์สเตตัสกลับมาเริ่มเดินใหม่ได้
         lock_states = ["npc_choice", "treasure_choice", "dungeon_choice", "trap_defense", "village", "shopping"]
         if player["current_state"] in lock_states:
             player_model.update_player_field(user_id, "current_state", "idle")
@@ -280,9 +174,9 @@ class GameCommands(commands.Cog):
             color=0x2b6cb0
         )
         
-        # 🎯 ดึงมาประกาศเรียกใช้ตรงนี้เพื่อสยบปัญหา Circular Import
+        # 🧭 [แก้ไขสำเร็จ] เปิดฉากส่งแผงผจญภัยแรกแบบกระซิบเห็นคนเดียวร้อยเปอร์เซ็นต์!
         from views.game_views import AdventureView
-        await ctx.send(embed=embed, view=AdventureView())
+        await ctx.send(embed=embed, view=AdventureView(author_id=user_id), ephemeral=True)
 
 # ฟังก์ชันสำหรับให้ตัวบอทหลักโหลด Cog นี้เข้าสู่ระบบ
 async def setup(bot):
