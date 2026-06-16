@@ -27,6 +27,7 @@ def create_bot(bot_type: str):
     @bot.event
     async def on_ready():
         player_model.init_db()
+        player_model.auto_update_schema()
         
         # 🔄 [เพิ่มบรรทัดนี้] สั่งให้บอทลงทะเบียนและอัปเดตระบบสแลชคำสั่งเข้าเซิร์ฟเวอร์จริง
         try:

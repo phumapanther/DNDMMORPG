@@ -181,3 +181,32 @@ def check_and_update_rank(user_id, current_level):
         return True, new_rank
         
     return False, old_rank
+
+def auto_update_schema():
+    """ฟังก์ชันเช็กโครงสร้างตารางออโต้ ถ้ามีฟิลด์ใหม่เพิ่มเข้ามา บอทจะทำการเพิ่มคอลัมน์ให้เองทันที"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # 1. ดึงรายชื่อคอลัมน์ปัจจุบันทั้งหมดที่มีอยู่ในตาราง players มาเช็ก
+    cursor.execute("PRAGMA table_info(players);")
+    columns = [row[1] for row in cursor.fetchall()] # row[1] คือชื่อคอลัมน์
+    
+    # 2. รายการคอลัมน์ใหม่ ๆ ที่เราอยากจะเพิ่มในอนาคต (ถ้ามีฟิลด์ใหม่ ให้มาเติมต่อท้ายลิสต์นี้ได้เลย)
+    required_columns = {
+        "total_online_time": "INT DEFAULT 0",
+        # "mana": "INT DEFAULT 100",        <-- สมมติวันหลังอยากเพิ่มมาเติมตรงนี้ได้เลย
+        # "guild_id": "TEXT DEFAULT 'None'" <-- สมมติวันหลังอยากเพิ่ม
+    }
+    
+    # 3. ลูปเช็กคอลัมน์ต่อคอลัมน์
+    for col_name, col_type in required_columns.items():
+        if col_name not in columns:
+            try:
+                # สั่งรันคำสั่ง SQL ALTER TABLE เพื่อสั่งเพิ่มคอลัมน์ใหม่สด ๆ บนเครื่องคลาวด์
+                cursor.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type};")
+                print(f"⚙️ [DB MIGRATION] เพิ่มคอลัมน์ใหม่ '{col_name}' เข้าสู่ตารางเรียบร้อยแล้ว!")
+            except Exception as e:
+                print(f"⚠️ [DB MIGRATION ERROR] ไม่สามารถเพิ่มคอลัมน์ {col_name} ได้: {e}")
+                
+    conn.commit()
+    conn.close()
