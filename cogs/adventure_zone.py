@@ -5,100 +5,118 @@ import asyncio
 class AdventureZone(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # 🔒 ทะเบียนเช็กสถานะห้อง {user_id: channel_id}
+        # เพื่อล็อกให้ 1 คนสร้างได้แค่ 1 ห้องจนกว่าจะโดนทำลาย
+        self.active_rooms = {}
 
-    # ─── ⚔️ คำสั่งเปิดห้องผจญภัยส่วนตัว และลบทิ้งอัตโนมัติเมื่อเงียบครบ 1 นาที (!adv) ───
     @commands.command(name="adv")
-    @commands.cooldown(1, 10.0, commands.BucketType.user) # ดักคูลดาวน์ป้องกันปั๊มห้องรัวๆ
+    @commands.cooldown(1, 5.0, commands.BucketType.user)
     async def create_adventure_room(self, ctx):
-        """คำสั่งสร้างห้องแชทผจญภัยออโต้ ถัดจากห้องเดิม ล็อกสิทธิ์ และลบทิ้งเมื่อไม่มีการเคลื่อนไหวใน 1 นาที"""
+        """คำสั่งสร้างห้องแชทผจญภัยออโต้ ถัดจากห้องเดิม ล็อกให้สร้างได้แค่คนละ 1 ห้องจนกว่าจะสลายไป"""
         guild = ctx.guild
         author = ctx.author
-        current_channel = ctx.channel # ห้องที่พิมพ์คำสั่ง
+        current_channel = ctx.channel
 
-        # ⏳ ส่งข้อความแจ้งเตือนเบื้องต้นว่ากำลังร่ายเวทสร้างห้อง
+        # 🛡️ [ระบบล็อก 1 คนต่อ 1 ห้อง] เช็กว่าผู้เล่นคนนี้มีห้องที่ทำงานค้างอยู่ไหม
+        if author.id in self.active_rooms:
+            # ดึงข้อมูลห้องจาก Discord มาตรวจสอบว่าห้องยังอยู่จริงไหม
+            existing_channel = self.bot.get_channel(self.active_rooms[author.id])
+            if not existing_channel:
+                try:
+                    existing_channel = await guild.fetch_channel(self.active_rooms[author.id])
+                except:
+                    existing_channel = None
+
+            if existing_channel:
+                # ถ้าห้องเก่ายังอยู่จริง ดักปฏิเสธไม่ให้สร้างใหม่ทันที!
+                await ctx.send(
+                    f"❌ **[สิทธิ์เต็ม]** คุณ {author.mention} มีมิติส่วนตัวที่เปิดค้างไว้ชั่วคราวแล้วครับ!\n"
+                    f"📌 กรุณาไปใช้งานที่ห้องเดิมก่อน ➡️ {existing_channel.mention} หรือรอให้ห้องนั้นเงียบครบ 1 นาทีจนสลายไปก่อนครับ",
+                    delete_after=10.0
+                )
+                return
+            else:
+                # ถ้าห้องสลายไปแล้วแต่ทะเบียนยังค้างอยู่ ให้ล้างทะเบียนห้องของไอดีนี้ทิ้งเพื่อเปิดให้สร้างใหม่
+                if author.id in self.active_rooms:
+                    del self.active_rooms[author.id]
+
+        # ⏳ ส่งข้อความเริ่มร่ายเวทสร้างมิติ
         status_msg = await ctx.send(f"⏳ **[สมาคมนักผจญภัย]** กำลังจัดเตรียมมิติส่วนตัวให้คุณ {author.mention}...")
 
-        # 🛡️ เซ็ตค่า Permissions (ปิดคนอื่น เปิดให้คนใช้คำสั่งเห็นคนเดียว)
+        # 🛡️ เซ็ตค่าสิทธิ์การมองเห็น (เห็นคนเดียว)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             author: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True) # ให้ตัวบอทเห็นด้วย
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
         }
 
         try:
-            # 📐 คำนวณตำแหน่งเพื่อให้ห้องใหม่สร้างอยู่ถัดลงมาจากห้องเดิมเป๊ะๆ
+            # 📐 กลับมาใช้ลอจิกเดิม: ให้ห้องใหม่สร้างอยู่ถัดลงมาจากห้องเดิมเป๊ะๆ
+            target_category = current_channel.category
             new_position = current_channel.position + 1
 
-            # 🛠️ สั่งสร้างห้องข้อความใหม่
             room_name = f"⚔️-มิติส่วนตัว-{author.name}"
             adv_channel = await guild.create_text_channel(
                 name=room_name,
-                category=current_channel.category,
+                category=target_category,
                 position=new_position,
                 overwrites=overwrites,
                 topic=f"ห้องผจญภัยส่วนตัวของ {author.name} | เงียบครบ 1 นาทีห้องจะปิดตัวลงทันที"
             )
 
-            # 🎨 สร้าง Embed ต้อนรับเมื่อเปิดประตูมิติสำเร็จ
+            # 🔥 ลงทะเบียนล็อกสิทธิ์ทันทีว่าไอดีนี้ยึดห้องนี้ไว้แล้ว
+            self.active_rooms[author.id] = adv_channel.id
+
+            # 🎨 ข้อความ Embed ต้อนรับ
             embed = discord.Embed(
                 title=f"🌲 มิติผจญภัยส่วนตัวของ {author.name}",
                 description=(
                     f"ยินดีต้อนรับคุณ {author.mention} เข้าสู่ห้องจำลองการเดินทาง!\n"
                     f"🔒 **ห้องนี้เป็นห้องลับ:** มีเพียงคุณและผู้ดูแลระบบเท่านั้นที่มองเห็นเนื้อหาในนี้\n\n"
-                    f"⚠️ **[ระบบทำลายตัวเองทำงาน]:** หากไม่มีการพิมพ์ข้อความใด ๆ ในห้องนี้เป็นเวลา **1 นาที** ห้องนี้จะสลายหายไปทันทีครับ!"
+                    f"⚠️ **[ระบบทำลายตัวเองทำงาน]:** หากไม่มีการพิมพ์ข้อความใด ๆ ในห้องนี้เป็นเวลา **1 นาที** ห้องนี้จะสลายหายไปทันทีครับ!\n"
+                    f"⚔️ **[เริ่มออกเดินทาง]:** พิมพ์คำสั่ง `!play` ในห้องนี้เพื่อเปิดฉากการผจญภัยได้เลย!"
                 ),
                 color=0x319795
             )
             embed.set_thumbnail(url=author.display_avatar.url)
             await adv_channel.send(embed=embed)
 
-            # 🧼 อัปเดตข้อความห้องเดิม ส่งลิงก์วาร์ปให้คนเล่นคลิกเด้งไปห้องใหม่
-            await status_msg.edit(content=f"✨ **[ประตูมิติเปิดออกแล้ว!]** คุณ {author.mention} สามารถเคลื่อนย้ายไปยังห้องผจญภัยได้ที่นี่ ➡️ {adv_channel.mention}")
+            # 🧼 ส่งปุ่มกด Link Button วาร์ปเข้าห้อง
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="⚔️ คลิกเพื่อเข้าสู่มิติผจญภัย", url=f"https://discord.com/channels/{guild.id}/{adv_channel.id}"))
+            await status_msg.edit(content=f"✨ **[ประตูมิติเปิดออกแล้ว!]** ประตูมิติส่วนตัวของคุณจัดเตรียมเสร็จสิ้นแล้วครับคุณ {author.mention}", view=view)
 
-            # ==========================================================
-            # ⏱️ [ระบบดักเวลาออโต้รีเซ็ตเมื่อมีคนพิมพ์แชท]
-            # ==========================================================
+            # ⏱️ ระบบดักตรวจจับการเคลื่อนไหวเพื่อทำลายห้อง
             def check(message):
-                # ดักจับว่ามีการพิมพ์ข้อความใดๆ ลงมาในห้องใหม่นี้หรือไม่
                 return message.channel.id == adv_channel.id
 
             while True:
                 try:
-                    # บอทจะจ้องมองห้องนี้เป็นเวลา 60 วินาที (1 นาที)
-                    # ถ้าระหว่าง 60 วิ มีคนพิมพ์อะไรลงมา ลูปจะวนเริ่มนับ 1 ใหม่ทันที (ต่อเวลาให้)
+                    # ถ้าระหว่าง 1 นาทีมีข้อความพิมพ์แชทเข้ามา จะทำการต่อเวลาลูปนับหนึ่งใหม่ทันที
                     await self.bot.wait_for('message', check=check, timeout=60.0)
-                    print(f"🔄 [Adventure Zone] ห้อง {room_name} มีการเคลื่อนไหว ระบบต่อเวลาให้เพิ่มอีก 1 นาที")
-                
                 except asyncio.TimeoutError:
-                    # 💥 เคสที่หลุด Timeout (เงียบเหงาครบ 60 วินาทีโดยไม่มีใครพิมพ์อะไรเลย)
-                    print(f"💥 [Adventure Zone] ห้อง {room_name} เงียบเกิน 1 นาที ระบบสั่งทำลายห้องถาวร")
-                    
-                    # สั่งลบห้องแชทนี้ออกจากดิสคอร์ดทันที
+                    # 💥 เมื่อห้องเงียบสนิทครบ 1 นาที สั่งลบห้องทิ้งทันที
                     await adv_channel.delete(reason="ห้องผจญภัยไม่มีการเคลื่อนไหวครบ 1 นาที")
                     
-                    # ส่งข้อความบอกในห้องเก่า (ห้องหลักที่ใช้เปิดคำสั่ง) เพื่อให้รู้ว่าห้องปิดแล้ว
+                    # 🔥 สำคัญที่สุด: ลบไอดีออกจากทะเบียน เพื่อปลดล็อกให้เขากลับมาใช้คำสั่ง !adv สร้างห้องใหม่ได้อีกครั้ง
+                    if author.id in self.active_rooms:
+                        del self.active_rooms[author.id]
+                    
                     try:
-                        await ctx.send(f"🌌 **[มิติสลาย]** มิติส่วนตัวของคุณ {author.mention} ได้สลายหายไปเรียบร้อยแล้วเนื่องจากไม่มีการเคลื่อนไหวครบ 1 นาที", delete_after=5.0)
+                        await ctx.send(f"🌌 **[มิติสลาย]** มิติส่วนตัวของคุณ {author.mention} ได้สลายหายไปเรียบร้อยแล้วเนื่องจากไม่มีการเคลื่อนไหว", delete_after=5.0)
                     except:
                         pass
-                    break # หลุดออกจากลูปเพื่อจบบรรทัดการทำงาน
+                    break # หลุดออกจากลูปทำงาน
 
         except discord.Forbidden:
-            await status_msg.edit(content="❌ **บอทเกิดข้อผิดพลาด:** บอทไม่มีสิทธิ์ในการจัดการห้องแชท (`Manage Channels`) กรุณาตรวจสอบสิทธิ์ยศของบอทด้วยครับ")
+            await status_msg.edit(content="❌ **บอทเกิดข้อผิดพลาด:** บอทไม่มีสิทธิ์ในการจัดการห้องแชท")
+            if author.id in self.active_rooms:
+                del self.active_rooms[author.id]
         except Exception as e:
-            print(f"⚠️ เกิดข้อผิดพลาดในการสร้างห้อง !adv: {e}")
+            print(f"⚠️ เกิดข้อผิดพลาดในระบบสร้างห้อง: {e}")
+            if author.id in self.active_rooms:
+                del self.active_rooms[author.id]
 
-    # ─── 🚨 ดักจับ Error คูลดาวน์ของคำสั่ง !adv ───
-    @create_adventure_room.error
-    async def adv_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            pass
-        elif isinstance(error, commands.CommandOnCooldown):
-            try:
-                await ctx.send(f"⏱️ **[มิติกำลังฟื้นฟู]** กรุณารออีก `{error.retry_after:.1f}` วินาที ถึงจะเปิดห้องผจญภัยใหม่ได้อีกครั้งครับ", delete_after=4.0)
-            except:
-                pass
-
-# ฟังก์ชันโหลด Cog เข้าสู่ระบบบอทหลัก
+# โหลดเข้าบอทหลัก
 async def setup(bot):
     await bot.add_cog(AdventureZone(bot))
