@@ -11,7 +11,7 @@ class GameCommands(commands.Cog):
 
     # ─── 🛒 คำสั่งเปิดร้านค้าและซื้อขายยศ + ระบบกาชาคู่ (สุ่มเผ่า/สุ่มคลาส) (!shop) ───
     @commands.command(name="shop")
-    @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
+    @commands.cooldown(1, 30.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
     async def shop(self, ctx, action: str = None, item_num: int = None):
         user_id = ctx.author.id
         player = player_model.get_player(user_id)
@@ -131,7 +131,7 @@ class GameCommands(commands.Cog):
 
     # ─── 📊 คำสั่งพิมพ์ดูโปรไฟล์ ───
     @commands.command(name="profile", aliases=["info"])
-    @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
+    @commands.cooldown(1, 30.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
     async def profile(self, ctx, member: discord.Member = None):
         target_member = member if member else ctx.author
         player_data = player_model.get_player(target_member.id)
@@ -141,7 +141,7 @@ class GameCommands(commands.Cog):
 
     # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก (ระบบแสดงผลเฉพาะคนใช้คำสั่ง - Ephemeral) ───
     # @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
-    # @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
+    # @commands.cooldown(1, 30.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
     # async def play(self, ctx):
     #     user_id = ctx.author.id
     #     player = player_model.get_player(user_id)
