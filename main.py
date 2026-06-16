@@ -36,15 +36,19 @@ def create_bot(bot_type: str):
             print(f"⚠️ การซิงค์คำสั่งสแลชขัดข้อง: {e}")
             
         print(f"🟢 [SYSTEM ONLINE] บอทร่าง [{bot_type.upper()}] ออนไลน์แล้ว!")
-        
+
     @bot.event
     async def on_setup():
         """โหลดโมดูลแยกตามสถานะการบายพาส"""
         try:
-            # 🔄 [โหมดบายพาส] ถ้าเป็นบอทเกม (Arthur) ให้โหลดทั้งระบบเกม และระบบสแกนแชท/เสียง ควบสองตำแหน่งเลย!
+            # 🔄 [โหมดบายพาส] ถ้าเป็นบอทเกม (Arthur) ให้โหลดทั้งระบบเกม, ระบบแอดมิน และระบบเสียงควบรวมกันเลย!
             if bot_type == "game":
                 await bot.load_extension("cogs.game_commands")
                 print("⚔️ [Game Bot] โหลดระบบคำสั่งคอมแบทและร้านค้าสำเร็จ!")
+                
+                # 🔥 [เพิ่มบรรทัดนี้] สั่งให้ Arthur โหลดท่อคำสั่งเสกสเตตัสของแอดมินเข้ามาทำงาน
+                await bot.load_extension("cogs.admin_commands")
+                print("👑 [Admin Commands] โหลดระบบจัดการฐานข้อมูล SQL สำหรับผู้ดูแลระบบสำเร็จ!")
                 
                 await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Bypass Mode] โน้ตระบบลูปห้องเสียงและฟาร์มแชทมาให้ Arthur รันแทนชั่วคราวสำเร็จ!")

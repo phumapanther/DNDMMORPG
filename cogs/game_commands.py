@@ -2,13 +2,14 @@ import discord
 from discord.ext import commands
 import models.player_model as player_model
 from views.profile_embed import create_profile_embed
+from views.profile_embed import GAME_RACES, GAME_CLASSES
 
 class GameCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # 🎮 [คลีนระบบ] ถอดคำสั่งสั่งเริ่มทำงานของลูปแจก EXP และ Cooldown แชทออกทั้งหมดแล้ว (ย้ายไปโมดูลอื่นสำเร็จ)
 
-    # ─── 🛒 คำสั่งเปิดร้านค้าและซื้อขายยศแบบข้อความ (!shop) ───
+    # ─── 🛒 คำสั่งเปิดร้านค้าและซื้อขายยศ + ระบบกาชาคู่ (สุ่มเผ่า/สุ่มคลาส) (!shop) ───
     @commands.command(name="shop")
     async def shop(self, ctx, action: str = None, item_num: int = None):
         user_id = ctx.author.id
@@ -18,74 +19,127 @@ class GameCommands(commands.Cog):
             await ctx.send("❌ 不พบข้อมูลตัวละครของคุณ กรุณาพิมพ์ `!play` เพื่อลงทะเบียนก่อนครับ")
             return
 
-        # 📋 คลังข้อมูลราคายศและชื่อยศในเซิร์ฟเวอร์
+        # 📋 คลังข้อมูลไอเทมในร้านค้า (ยศ 1-3 ปิดไว้ / เปิดกาชาเบอร์ 4 และ 5)
         shop_items = {
-            1: {"name": "ขายยศ 1", "price": 10000},
-            2: {"name": "ขายยศ 2", "price": 50000},
-            3: {"name": "ขายยศ 3", "price": 100000}
+            # 1: {"name": "ขายยศ 1", "price": 10000, "type": "role"},
+            # 2: {"name": "ขายยศ 2", "price": 50000, "type": "role"},
+            # 3: {"name": "ขายยศ 3", "price": 100000, "type": "role"},
+            4: {"name": "🎲 คัมภีร์กาชาสุ่มเปลี่ยนเผ่าพันธุ์", "price": 5000, "type": "gacha_race"},
+            5: {"name": "🔮 คัมภีร์กาชาสุ่มเปลี่ยนคลาสอาชีพ", "price": 5000, "type": "gacha_class"} # 🔥 เพิ่มตู้คลาสตรงนี้
         }
 
         # 🛑 เคสที่ 1: พิมพ์ !shop เฉยๆ -> บอทเปิดใบรายการหน้าร้านให้ดู
         if action is None:
             embed = discord.Embed(
-                title="🛒 สมาคมนักผจญภัย - ร้านค้าตราเกียรติยศ (Text Edition)",
+                title="🛒 สมาคมนักผจญภัย - ร้านค้าตราเกียรติยศ & ตู้กาชาเวทมนตร์",
                 description=f"ยินดีต้อนรับคุณ **{ctx.author.name}** เข้าสู่หอเกียรติยศ\n💰 เงินคงเหลือปัจจุบัน: `{player.get('cash', 0)}` ทอง\n\n"
-                            f"📌 **รายการยศที่มีวางจำหน่าย:**\n"
-                            f"🔹 **[1] ยศทดสอบ 1** — ราคา `10,000` ทอง\n"
-                            f"🔹 **[2] ยศทดสอบ 2** — ราคา `50,000` ทอง\n"
-                            f"🔹 **[3] ยศทดสอบ 3** — ราคา `100,000` ทอง\n\n"
-                            f"⌨️ **วิธีสั่งซื้อ:** พิมพ์คำสั่ง `!shop ซื้อ [เลขยศ]` (เช่น `!shop ซื้อ 1`)",
+                            f"📌 **รายการสินค้าที่มีวางจำหน่าย:**\n"
+                            f"🔸 **[4] 🎲 คัมภีร์กาชาสุ่มเปลี่ยนเผ่า** — ราคา `5,000` ทอง *(ลบเผ่าเก่า แอดเผ่าใหม่)*\n"
+                            f"🔮 **[5] 🔮 คัมภีร์กาชาสุ่มเปลี่ยนคลาส** — ราคา `5,000` ทอง *(ลบกลุ่มคลาสเก่า แอดคลาสใหม่)*\n\n"
+                            f"⌨️ **วิธีสั่งซื้อ:** พิมพ์คำสั่ง `!shop ซื้อ [เลขไอเทม]` (เช่น `!shop ซื้อ 5` เพื่อสุ่มอาชีพ)",
                 color=0xecc94b
             )
             await ctx.send(embed=embed)
             return
 
-        # 🛑 เคสที่ 2: พิมพ์คำสั่งซื้อแต่กรอกพารามิเตอร์ไม่ครบ หรือพิมพ์คำอื่นที่ไม่ใช่ "ซื้อ"
+        # 🛑 เคสที่ 2: พิมพ์คำสั่งซื้อแต่กรอกพารามิเตอร์ไม่ครบ
         if action not in ["ซื้อ", "buy"] or item_num is None:
-            await ctx.send("❓ **รูปแบบคำสั่งไม่ถูกต้อง:** กรุณาพิมพ์ `!shop ซื้อ [เลขยศ]` เช่น `!shop ซื้อ 1` ครับ")
+            await ctx.send("❓ **รูปแบบคำสั่งไม่ถูกต้อง:** กรุณาพิมพ์ `!shop ซื้อ [เลขไอเทม]` เช่น `!shop ซื้อ 5` ครับ")
             return
 
-        # 🛑 เคสที่ 3: กรอกเลขยศที่ไม่มีในร้าน (เช่น ใส่เลข 4 หรือ 99)
+        # 🛑 เคสที่ 3: กรอกเลขไอเทมที่ไม่มีในร้าน
         if item_num not in shop_items:
-            await ctx.send("❌ **ไม่มีสินค้านี้ในระบบ:** กรุณาเลือกซื้อเฉพาะหมายเลข 1, 2 หรือ 3 เท่านั้นครับ")
+            await ctx.send("❌ **ไม่มีสินค้านี้ในระบบ:** ปัจจุบันระบบเปิดจำหน่ายเฉพาะหมายเลข 4 และ 5 เท่านั้นครับ")
             return
 
-        # 🎯 เข้าสู่กระบวนการตรวจสอบข้อมูลและแลกเปลี่ยนยศ
         item = shop_items[item_num]
-        role_name = item["name"]
         price = item["price"]
         current_cash = player.get("cash", 0)
 
-        # 🚫 เช็กทอง
         if current_cash < price:
-            await ctx.send(f"❌ **ทองไม่พอ!** คุณมีเงินเพียง `{current_cash}` ทอง แต่ยศนี้ราคา `{price}` ทองครับ")
+            await ctx.send(f"❌ **ทองไม่พอ!** คุณมีเงินเพียง `{current_cash}` ทอง แต่ไอเทมนี้ราคา `{price}` ทองครับ")
             return
 
         guild = ctx.guild
         member = ctx.author
-        role = discord.utils.get(guild.roles, name=role_name)
+        import random
 
-        # 🚫 เช็กว่าแอดมินสร้างยศรอไว้ในดิสคอร์ดหรือยัง
-        if not role:
-            await ctx.send(f"⚠️ **ระบบเซิร์ฟเวอร์ขัดข้อง:** ไม่พบยศชื่อ `{role_name}` ในเซิร์ฟเวอร์นี้ (กรุณาแจ้งให้แอดมินสร้างยศให้ตรงกัน)")
+        # ==========================================================
+        # 🎰 [ตู้กาชาเผ่า] เคสที่ 4: สุ่มเปลี่ยนเผ่าพันธุ์
+        # ==========================================================
+        if item["type"] == "gacha_race":
+            new_cash = current_cash - price
+            player_model.update_player_field(user_id, "cash", new_cash)
+            new_race = random.choice(GAME_RACES)
+
+            try:
+                removed_races = []
+                for race_name in GAME_RACES:
+                    old_role = discord.utils.get(guild.roles, name=race_name)
+                    if old_role and old_role in member.roles:
+                        await member.remove_roles(old_role)
+                        removed_races.append(race_name)
+
+                new_role = discord.utils.get(guild.roles, name=new_race)
+                if not new_role:
+                    await ctx.send(f"⚠️ **ระบบขัดข้อง:** สุ่มได้เผ่า `{new_race}` แต่ไม่พบชื่อยศนี้ในดิสคอร์ด")
+                    return
+
+                await member.add_roles(new_role)
+                removed_msg = f" (ปลดเผ่าเดิม: `{removed_races[0]}` ออกแล้ว)" if removed_races else ""
+                await ctx.send(
+                    f"🎰🔮 **[ตู้กาชาโบราณ]** คุณ {member.mention} ได้ฉีกคัมภีร์สุ่มเผ่าพันธุ์สำเร็จ!\n"
+                    f"🧬 พรแห่งโชคชะตาเปลี่ยนร่างของคุณเป็น: **{new_race}** ✨{removed_msg}\n"
+                    f"💸 เสียค่าธรรมเนียมกาชา: `- {price}` ทอง (คงเหลือ: `{new_cash}` ทอง)"
+                )
+            except discord.Forbidden:
+                await ctx.send(f"❌ บอทไม่มีสิทธิ์จัดการยศ กรุณาลากยศบอทให้อยู่สูงกว่ายศเผ่าพันธุ์ทั้งหมด")
+            except Exception as e:
+                print(f"⚠️ เกิดข้อผิดพลาดในกาชาเผ่า: {e}")
             return
 
-        # 🚫 เช็กยศซ้ำซ้อนบนตัวผู้เล่น
-        if role in member.roles:
-            await ctx.send(f"🔰 คุณมี `{role_name}` ประดับอยู่บนตัวละครอยู่แล้วครับ!")
+        # ==========================================================
+        # 🔮 [ตู้กาชาคลาส] เคสที่ 5: สุ่มเปลี่ยนคลาสอาชีพ (เวอร์ชันเช็ก/สลับยศบนดิสคอร์ด 100%)
+        # ==========================================================
+        if item["type"] == "gacha_class":
+            # 1. หักเงินใน DB ตามปกติ
+            new_cash = current_cash - price
+            player_model.update_player_field(user_id, "cash", new_cash)
+            
+            # 2. สุ่มคลาสอาชีพใหม่จากลิสต์ในไฟล์ profile_embed
+            new_class = random.choice(GAME_CLASSES)
+
+            try:
+                removed_classes = []
+                # 🛡️ 3. ลอจิกเคลียร์ยศคลาสอาชีพเก่าทั้งหมดออกจากตัวผู้เล่นบนดิสคอร์ด
+                for class_name in GAME_CLASSES:
+                    old_role = discord.utils.get(guild.roles, name=class_name)
+                    if old_role and old_role in member.roles:
+                        await member.remove_roles(old_role)
+                        removed_classes.append(class_name)
+
+                # 4. มอบยศคลาสอาชีพใหม่ให้ผู้เล่นบนดิสคอร์ด
+                new_role = discord.utils.get(guild.roles, name=new_class)
+                if not new_role:
+                    await ctx.send(f"⚠️ **ระบบขัดข้อง:** สุ่มได้คลาส `{new_class}` แต่ไม่พบชื่อยศนี้ในดิสคอร์ด")
+                    return
+
+                await member.add_roles(new_role)
+                
+                # ❌ [ลบออกแล้ว!] บรรทัด player_model.update_player_field(user_id, "class", new_class) ถูกเอาออกถาวรเพื่อไม่ให้เกิด Error column class
+
+                # 5. ประกาศผลลัพธ์ลงแชท
+                removed_msg = f" (สละอาชีพเดิม: `{removed_classes[0]}` เคลียร์ออกเรียบร้อย)" if removed_classes else ""
+                await ctx.send(
+                    f"🔮✨ **[แท่นทำนายวิญญาณ]** คุณ {member.mention} ได้เบิกเนตรสุ่มคลาสอาชีพใหม่สำเร็จ!\n"
+                    f"⚔️ จิตวิญญาณแห่งการต่อสู้เลือกให้คุณเป็นคลาส: **{new_class}** 🛡️{removed_msg}\n"
+                    f"💸 เสียค่าธูปทำนายวิญญาณ: `- {price}` ทอง (คงเหลือ: `{new_cash}` ทอง)"
+                )
+            except discord.Forbidden:
+                await ctx.send(f"❌ บอทไม่มีสิทธิ์จัดการยศ กรุณาลากยศบอทให้อยู่สูงกว่ายศคลาสอาชีพทั้งหมดด้วยครับ")
+            except Exception as e:
+                print(f"⚠️ เกิดข้อผิดพลาดในกาชาคลาส: {e}")
             return
-
-        # 💸 ผ่านกฎทั้งหมด -> หักเงินใน DB และสั่งแจกยศดิสคอร์ดทันที
-        new_cash = current_cash - price
-        player_model.update_player_field(user_id, "cash", new_cash)
-
-        try:
-            await member.add_roles(role)
-            await ctx.send(f"🎉 **ซื้อยศสำเร็จ!**\n🎖️ คุณได้รับยศ: **{role_name}** ติดตัวเรียบร้อยแล้ว!\n💸 เสียค่าธรรมเนียมสมาคม: `- {price}` ทอง (คงเหลือ: `{new_cash}` ทอง)")
-        except discord.Forbidden:
-            await ctx.send(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) กรุณาตรวจสอบให้มั่นใจว่าลากยศของบอทให้อยู่สูงกว่ายศที่วางขายแล้วหรือยัง")
-        except Exception as e:
-            print(f"⚠️ เกิดข้อผิดพลาดในร้านค้าแบบพิมพ์: {e}")
 
     # ─── 📊 คำสั่งพิมพ์ดูโปรไฟล์ ───
     @commands.command(name="profile", aliases=["info"])
