@@ -54,6 +54,12 @@ def create_bot(bot_type: str):
                 await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Bypass Mode] โน้ตระบบลูปห้องเสียงและฟาร์มแชทมาให้ Arthur รันแทนชั่วคราวสำเร็จ!")
                 
+                await bot.load_extension('cogs.owner_announce')
+                print("📢 [Owner Announce] โหลดระบบประกาศข่าวสารสำเร็จ!")
+
+                await bot.load_extension('cogs.adventure_zone')
+                print("🌌 [Adventure Zone] โหลดระบบห้องผจญภัยส่วนตัวสำเร็จ!")
+                
             elif bot_type == "chat":
                 await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Chat/Voice Bot] โหลดระบบลูปห้องเสียงและฟาร์มแชทสำเร็จ!")

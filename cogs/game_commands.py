@@ -139,78 +139,93 @@ class GameCommands(commands.Cog):
         embed = create_profile_embed(target_member, player_data)
         await ctx.send(embed=embed)
 
-    # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก (ระบบแสดงผลเฉพาะคนใช้คำสั่ง - Ephemeral) ───
-    # @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
-    # @commands.cooldown(1, 30.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
-    # async def play(self, ctx):
-    #     user_id = ctx.author.id
-    #     player = player_model.get_player(user_id)
+    # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก (ระบบแสดงผลเฉพาะคนใช้คำสั่ง - Ephemeral + ล็อกห้องมิติ) ───
+    @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
+    @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ แก้กลับเป็นคูลดาวน์ 3 วินาทีตามที่คุยกันรอบก่อนครับน้า
+    async def play(self, ctx):
+        user_id = ctx.author.id
         
-    #     if not player:
-    #         await ctx.send("❌ **ไม่พบข้อมูลตัวละครของคุณ!** กรุณาลงทะเบียนสร้างตัวละครก่อนครับ", ephemeral=True)
-    #         return
+        # 🔒 [ระบบรักษาความปลอดภัยพื้นที่] ดักเช็กให้ใช้คำสั่งได้เฉพาะในห้องมิติส่วนตัวของตัวเองเท่านั้น!
+        required_room_part = f"มิติส่วนตัว-{ctx.author.name.lower()}"
+        current_room_name = ctx.channel.name.lower()
 
-    #     current_level = player.get("level", 1)
-    #     _, current_rank = player_model.check_and_update_rank(user_id, current_level)
+        if required_room_part not in current_room_name:
+            # ใช้ ephemeral=True เพื่อส่งข้อความกระซิบเตือนเห็นคนเดียว ไม่รบกวนช่องแชทหลัก
+            await ctx.send(
+                f"❌ **[พื้นที่ไม่ถูกต้อง]** คุณ {ctx.author.mention} ไม่สามารถเริ่มผจญภัยตรงนี้ได้ครับ!\n"
+                f"📌 กรุณาไปเปิดมิติส่วนตัวโดยพิมพ์ `!adv` ในห้องหลักก่อน แล้วเข้าไปรันคำสั่งเล่นเกมในห้องลับนั้นนะครับ", 
+                ephemeral=True
+            )
+            return
+
+        # ─── 🟢 โครงสร้างโค้ดระบบเกมเดิมทำงานต่อจากตรงนี้ด้านล่างเมื่อผ่านประตูมิติเข้ามา ───
+        player = player_model.get_player(user_id)
         
-    #     guild = ctx.guild
-    #     member = ctx.author
+        if not player:
+            await ctx.send("❌ **ไม่พบข้อมูลตัวละครของคุณ!** กรุณาลงทะเบียนสร้างตัวละครก่อนครับ", ephemeral=True)
+            return
+
+        current_level = player.get("level", 1)
+        _, current_rank = player_model.check_and_update_rank(user_id, current_level)
         
-    #     if guild and isinstance(member, discord.Member):
-    #         def get_eligible_ranks(lvl):
-    #             eligible = ["F"]
-    #             if lvl >= 5: eligible.append("E")
-    #             if lvl >= 10: eligible.append("D")
-    #             if lvl >= 20: eligible.append("C")
-    #             if lvl >= 50: eligible.append("B")
-    #             if lvl >= 80: eligible.append("A")
-    #             if lvl >= 100: eligible.append("SSS")
-    #             return eligible
+        guild = ctx.guild
+        member = ctx.author
+        
+        if guild and isinstance(member, discord.Member):
+            def get_eligible_ranks(lvl):
+                eligible = ["F"]
+                if lvl >= 5: eligible.append("E")
+                if lvl >= 10: eligible.append("D")
+                if lvl >= 20: eligible.append("C")
+                if lvl >= 50: eligible.append("B")
+                if lvl >= 80: eligible.append("A")
+                if lvl >= 100: eligible.append("SSS")
+                return eligible
 
-    #         eligible_ranks = get_eligible_ranks(current_level)
-    #         roles_to_add = []
+            eligible_ranks = get_eligible_ranks(current_level)
+            roles_to_add = []
 
-    #         for r in eligible_ranks:
-    #             role_name = f"นักผจญภัยแรงค์ {r}"
-    #             role = discord.utils.get(guild.roles, name=role_name)
-    #             if role and role not in member.roles:
-    #                 roles_to_add.append(role)
+            for r in eligible_ranks:
+                role_name = f"นักผจญภัยแรงค์ {r}"
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role and role not in member.roles:
+                    roles_to_add.append(role)
 
-    #         if roles_to_add:
-    #             try:
-    #                 await member.add_roles(*roles_to_add)
-    #                 role_names_str = ", ".join([r.name for r in roles_to_add])
-    #                 print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
-    #             except discord.Forbidden:
-    #                 print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
-    #             except Exception as e:
-    #                 print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
+            if roles_to_add:
+                try:
+                    await member.add_roles(*roles_to_add)
+                    role_names_str = ", ".join([r.name for r in roles_to_add])
+                    print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
+                except discord.Forbidden:
+                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
+                except Exception as e:
+                    print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
 
-    #     if player["current_state"] in ["fighting", "dead"] or player["hp"] <= 0:
-    #         player_model.update_player_field(user_id, "current_state", "dead")
+        if player["current_state"] in ["fighting", "dead"] or player["hp"] <= 0:
+            player_model.update_player_field(user_id, "current_state", "dead")
             
-    #         embed = discord.Embed(
-    #             title="💀 คุณพ่ายแพ้ในการต่อสู้และหมดสติลง...",
-    #             description=f"วิญญาณของคุณยังล่องลอยอยู่กลางสนามรบ\n❤️ HP ของคุณ: `0/{player['max_hp']}`\n\n📌 กรุณากดปุ่มด้านล่างเพื่อฟื้นตัวและยอมรับบทลงโทษกลับหมู่บ้าน",
-    #             color=0xe53e3e
-    #         )
-    #         from views.game_views import RespawnView
-    #         await ctx.send(embed=embed, view=RespawnView(user_id), ephemeral=True)
-    #         return 
+            embed = discord.Embed(
+                title="💀 คุณพ่ายแพ้ในการต่อสู้และหมดสติลง...",
+                description=f"วิญญาณของคุณยังล่องลอยอยู่กลางสนามรบ\n❤️ HP ของคุณ: `0/{player['max_hp']}`\n\n📌 กรุณากดปุ่มด้านล่างเพื่อฟื้นตัวและยอมรับบทลงโทษกลับหมู่บ้าน",
+                color=0xe53e3e
+            )
+            from views.game_views import RespawnView
+            await ctx.send(embed=embed, view=RespawnView(user_id), ephemeral=True)
+            return 
 
-    #     lock_states = ["npc_choice", "treasure_choice", "dungeon_choice", "trap_defense", "village", "shopping"]
-    #     if player["current_state"] in lock_states:
-    #         player_model.update_player_field(user_id, "current_state", "idle")
-    #         player = player_model.get_player(user_id)
+        lock_states = ["npc_choice", "treasure_choice", "dungeon_choice", "trap_defense", "village", "shopping"]
+        if player["current_state"] in lock_states:
+            player_model.update_player_field(user_id, "current_state", "idle")
+            player = player_model.get_player(user_id)
 
-    #     embed = discord.Embed(
-    #         title="⚔️ ยินดีต้อนรับสู่โลก D&D MMORPG",
-    #         description=f"กระเป๋าเงินกลางของคุณ: `{player['cash']}` ทอง\nสถานะปัจจุบัน: `{player['current_state']}`",
-    #         color=0x2b6cb0
-    #     )
+        embed = discord.Embed(
+            title="⚔️ ยินดีต้อนรับสู่โลก D&D MMORPG",
+            description=f"กระเป๋าเงินกลางของคุณ: `{player['cash']}` ทอง\nสถานะปัจจุบัน: `{player['current_state']}`",
+            color=0x2b6cb0
+        )
         
-    #     from views.game_views import AdventureView
-    #     await ctx.send(embed=embed, view=AdventureView(author_id=user_id), ephemeral=True)
+        from views.game_views import AdventureView
+        await ctx.send(embed=embed, view=AdventureView(author_id=user_id), ephemeral=True)
 
     # ─── 🚨 ระบบตรวจจับและดักจับ Error คูลดาวน์ของ Cog นี้ ───
     async def cog_command_error(self, ctx, error):
