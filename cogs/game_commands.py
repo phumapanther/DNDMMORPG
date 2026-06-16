@@ -140,77 +140,77 @@ class GameCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     # ─── ⚔️ คำสั่งเล่นเกมคอร์หลัก (ระบบแสดงผลเฉพาะคนใช้คำสั่ง - Ephemeral) ───
-    @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
-    @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
-    async def play(self, ctx):
-        user_id = ctx.author.id
-        player = player_model.get_player(user_id)
+    # @commands.hybrid_command(name="play", description="เริ่มออกเดินทางในโลก D&D MMORPG")
+    # @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
+    # async def play(self, ctx):
+    #     user_id = ctx.author.id
+    #     player = player_model.get_player(user_id)
         
-        if not player:
-            await ctx.send("❌ **ไม่พบข้อมูลตัวละครของคุณ!** กรุณาลงทะเบียนสร้างตัวละครก่อนครับ", ephemeral=True)
-            return
+    #     if not player:
+    #         await ctx.send("❌ **ไม่พบข้อมูลตัวละครของคุณ!** กรุณาลงทะเบียนสร้างตัวละครก่อนครับ", ephemeral=True)
+    #         return
 
-        current_level = player.get("level", 1)
-        _, current_rank = player_model.check_and_update_rank(user_id, current_level)
+    #     current_level = player.get("level", 1)
+    #     _, current_rank = player_model.check_and_update_rank(user_id, current_level)
         
-        guild = ctx.guild
-        member = ctx.author
+    #     guild = ctx.guild
+    #     member = ctx.author
         
-        if guild and isinstance(member, discord.Member):
-            def get_eligible_ranks(lvl):
-                eligible = ["F"]
-                if lvl >= 5: eligible.append("E")
-                if lvl >= 10: eligible.append("D")
-                if lvl >= 20: eligible.append("C")
-                if lvl >= 50: eligible.append("B")
-                if lvl >= 80: eligible.append("A")
-                if lvl >= 100: eligible.append("SSS")
-                return eligible
+    #     if guild and isinstance(member, discord.Member):
+    #         def get_eligible_ranks(lvl):
+    #             eligible = ["F"]
+    #             if lvl >= 5: eligible.append("E")
+    #             if lvl >= 10: eligible.append("D")
+    #             if lvl >= 20: eligible.append("C")
+    #             if lvl >= 50: eligible.append("B")
+    #             if lvl >= 80: eligible.append("A")
+    #             if lvl >= 100: eligible.append("SSS")
+    #             return eligible
 
-            eligible_ranks = get_eligible_ranks(current_level)
-            roles_to_add = []
+    #         eligible_ranks = get_eligible_ranks(current_level)
+    #         roles_to_add = []
 
-            for r in eligible_ranks:
-                role_name = f"นักผจญภัยแรงค์ {r}"
-                role = discord.utils.get(guild.roles, name=role_name)
-                if role and role not in member.roles:
-                    roles_to_add.append(role)
+    #         for r in eligible_ranks:
+    #             role_name = f"นักผจญภัยแรงค์ {r}"
+    #             role = discord.utils.get(guild.roles, name=role_name)
+    #             if role and role not in member.roles:
+    #                 roles_to_add.append(role)
 
-            if roles_to_add:
-                try:
-                    await member.add_roles(*roles_to_add)
-                    role_names_str = ", ".join([r.name for r in roles_to_add])
-                    print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
-                except discord.Forbidden:
-                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
-                except Exception as e:
-                    print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
+    #         if roles_to_add:
+    #             try:
+    #                 await member.add_roles(*roles_to_add)
+    #                 role_names_str = ", ".join([r.name for r in roles_to_add])
+    #                 print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
+    #             except discord.Forbidden:
+    #                 print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
+    #             except Exception as e:
+    #                 print(f"⚠️ เกิดข้อผิดพลาดในการซิงค์ยศตอน !play: {e}")
 
-        if player["current_state"] in ["fighting", "dead"] or player["hp"] <= 0:
-            player_model.update_player_field(user_id, "current_state", "dead")
+    #     if player["current_state"] in ["fighting", "dead"] or player["hp"] <= 0:
+    #         player_model.update_player_field(user_id, "current_state", "dead")
             
-            embed = discord.Embed(
-                title="💀 คุณพ่ายแพ้ในการต่อสู้และหมดสติลง...",
-                description=f"วิญญาณของคุณยังล่องลอยอยู่กลางสนามรบ\n❤️ HP ของคุณ: `0/{player['max_hp']}`\n\n📌 กรุณากดปุ่มด้านล่างเพื่อฟื้นตัวและยอมรับบทลงโทษกลับหมู่บ้าน",
-                color=0xe53e3e
-            )
-            from views.game_views import RespawnView
-            await ctx.send(embed=embed, view=RespawnView(user_id), ephemeral=True)
-            return 
+    #         embed = discord.Embed(
+    #             title="💀 คุณพ่ายแพ้ในการต่อสู้และหมดสติลง...",
+    #             description=f"วิญญาณของคุณยังล่องลอยอยู่กลางสนามรบ\n❤️ HP ของคุณ: `0/{player['max_hp']}`\n\n📌 กรุณากดปุ่มด้านล่างเพื่อฟื้นตัวและยอมรับบทลงโทษกลับหมู่บ้าน",
+    #             color=0xe53e3e
+    #         )
+    #         from views.game_views import RespawnView
+    #         await ctx.send(embed=embed, view=RespawnView(user_id), ephemeral=True)
+    #         return 
 
-        lock_states = ["npc_choice", "treasure_choice", "dungeon_choice", "trap_defense", "village", "shopping"]
-        if player["current_state"] in lock_states:
-            player_model.update_player_field(user_id, "current_state", "idle")
-            player = player_model.get_player(user_id)
+    #     lock_states = ["npc_choice", "treasure_choice", "dungeon_choice", "trap_defense", "village", "shopping"]
+    #     if player["current_state"] in lock_states:
+    #         player_model.update_player_field(user_id, "current_state", "idle")
+    #         player = player_model.get_player(user_id)
 
-        embed = discord.Embed(
-            title="⚔️ ยินดีต้อนรับสู่โลก D&D MMORPG",
-            description=f"กระเป๋าเงินกลางของคุณ: `{player['cash']}` ทอง\nสถานะปัจจุบัน: `{player['current_state']}`",
-            color=0x2b6cb0
-        )
+    #     embed = discord.Embed(
+    #         title="⚔️ ยินดีต้อนรับสู่โลก D&D MMORPG",
+    #         description=f"กระเป๋าเงินกลางของคุณ: `{player['cash']}` ทอง\nสถานะปัจจุบัน: `{player['current_state']}`",
+    #         color=0x2b6cb0
+    #     )
         
-        from views.game_views import AdventureView
-        await ctx.send(embed=embed, view=AdventureView(author_id=user_id), ephemeral=True)
+    #     from views.game_views import AdventureView
+    #     await ctx.send(embed=embed, view=AdventureView(author_id=user_id), ephemeral=True)
 
     # ─── 🚨 ระบบตรวจจับและดักจับ Error คูลดาวน์ของ Cog นี้ ───
     async def cog_command_error(self, ctx, error):
