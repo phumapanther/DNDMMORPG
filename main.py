@@ -83,8 +83,8 @@ async def main():
 
     # 🔥 [สั่งรันเฉพาะบอทแรก] บายพาสตัวที่ 2 และ 3 ออกไปก่อนชั่วคราว
     await asyncio.gather(
-        run_game_bot(TOKEN_GAME),
-        # run_chat_bot(TOKEN_CHAT_VOICE), # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
+        # run_game_bot(TOKEN_GAME),
+        run_chat_bot(TOKEN_CHAT_VOICE), # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
         # run_admin_bot(TOKEN_ADMIN)      # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
     )
 
