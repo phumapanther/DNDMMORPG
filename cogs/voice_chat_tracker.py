@@ -107,7 +107,7 @@ class VoiceChatTracker(commands.Cog):
                             except Exception as e:
                                 print(f"⚠️ เกิดข้อผิดพลาดในการแจกยศ: {e}")
         
-        print(f"🏁 [SCAN FINISHED] ─── ประมวลผลลูปห้องเสียงรอบนี้เสร็จสิ้น ───\n")
+        # print(f"🏁 [SCAN FINISHED] ─── ประมวลผลลูปห้องเสียงรอบนี้เสร็จสิ้น ───\n")
     
     # ─── 💬 ระบบดักฟังช่องแชท แจกเงินเล็กน้อยเมื่อพิมพ์คุย (Text Chat Reward) ───
     @commands.Cog.listener()
