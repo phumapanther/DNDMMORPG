@@ -328,9 +328,9 @@ class VillageEventView(View):
             view=AdventureView(author_id=self.user_id) # ล็อกสิทธิ์ต่อ
         )
 
-    @discord.ui.button(label="🛒 ซื้อของ", style=discord.ButtonStyle.green)
-    async def shop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🏪 พ่อค้าในหมู่บ้านโบกมือทักทาย (ระบบเปิดร้านค้ากำลังพัฒนาในสเต็ปถัดไป)", ephemeral=True)
+    # @discord.ui.button(label="🛒 ซื้อของ", style=discord.ButtonStyle.green)
+    # async def shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     await interaction.response.send_message("🏪 พ่อค้าในหมู่บ้านโบกมือทักทาย (ระบบเปิดร้านค้ากำลังพัฒนาในสเต็ปถัดไป)", ephemeral=True)
 
     @discord.ui.button(label="🚶 ออกเดินทางต่อ", style=discord.ButtonStyle.secondary)
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -414,11 +414,11 @@ class NpcEventView(View):
                 content=f"🧓 NPC ถูกชะตาในตัวคุณ! เขาใจดีมอบเศษเงินทุนกลางจำนวน `{gold_gift}` ทองให้ฟรี!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
-        elif outcome == "shop":
-            await interaction.response.edit_message(
-                content="📜 NPC ขอเปิดกระเป๋าสุ่มขายของหายากให้คุณในราคาพิเศษ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
-                view=AdventureView(author_id=self.user_id)
-            )
+        # elif outcome == "shop":
+        #     await interaction.response.edit_message(
+        #         content="📜 NPC ขอเปิดกระเป๋าสุ่มขายของหายากให้คุณในราคาพิเศษ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
+        #         view=AdventureView(author_id=self.user_id)
+        #     )
         else:
             await interaction.response.edit_message(
                 content="💤 NPC แค่บ่นพึมพำเรื่องฟ้าฝนชวนคุยแก้เหงาเฉยๆ ไม่มีอะไรเกิดขึ้น\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 

@@ -54,28 +54,29 @@ def get_player(user_id):
     conn.row_factory = sqlite3.Row # 🔥 ใช้ระบบดึงข้อมูลแบบ Dict-Key ป้องกันเรื่องจำลำดับ Row พลาด
     cursor = conn.cursor()
     
-    # ดึงค่าคอลัมน์มาครบทุกตัวรวมถึง rank ด้วย
+    # 🌟 [ปรับจุดนี้] ใช้ * เพื่อสั่งดึงข้อมูลมา "ทุกคอลัมน์" ที่มีอยู่ในตาราง players ทันที!
     cursor.execute("""
-        SELECT level, exp, rank, hp, max_hp, cash, bank, inventory, armor, current_state, last_event, last_death, village_cooldown, dungeon_steps 
-        FROM players WHERE user_id = ?
+        SELECT * FROM players WHERE user_id = ?
     """, (user_id,))
     row = cursor.fetchone()
     
     if row is None:
+        # ตรง INSERT นี้เรายังต้องระบุฟิลด์ชัดเจนเผื่อเวลาสร้างไอดีใหม่ให้ระบบรู้ว่ายัดค่าลงช่องไหนครับ
         cursor.execute("""
-            INSERT INTO players (user_id, level, exp, rank, hp, max_hp, cash, bank, inventory, armor, current_state, last_event, last_death, village_cooldown, dungeon_steps) 
-            VALUES (?, 1, 0, 'F', 100, 100, 500, 0, '[]', 'None', 'idle', 'none', NULL, 0, 0)
+            INSERT INTO players (user_id, level, exp, rank, hp, max_hp, cash, bank, inventory, armor, current_state, last_event, last_death, village_cooldown, dungeon_steps, total_online_time) 
+            VALUES (?, 1, 0, 'F', 100, 100, 500, 0, '[]', 'None', 'idle', 'none', NULL, 0, 0, 0)
         """, (user_id,))
         conn.commit()
         conn.close()
         return {
             "level": 1, "exp": 0, "rank": "F", "hp": 100, "max_hp": 100, "cash": 500, "bank": 0,
-            "inventory": [], "armor": "None", "current_state": "idle", "last_event": "none", "last_death": None, "village_cooldown": 0, "dungeon_steps": 0
+            "inventory": [], "armor": "None", "current_state": "idle", "last_event": "none", "last_death": None, "village_cooldown": 0, "dungeon_steps": 0,
+            "total_online_time": 0
         }
     
     conn.close()
     
-    # แปลง Row วัตถุให้เป็น Standard Python Dictionary เพื่อให้ไฟล์อื่นดึงไป .get() หรือวงเล็บเหลี่ยมได้ไม่เออร์เรอร์
+    # แปลง Row วัตถุให้เป็น Standard Python Dictionary เพื่อให้ไฟล์อื่นดึงไป .get() ได้ไม่เออร์เรอร์
     p_dict = dict(row)
     p_dict["inventory"] = json.loads(p_dict["inventory"])
     return p_dict
@@ -87,6 +88,15 @@ def update_player_field(user_id, field, value):
     if isinstance(value, list):
         value = json.dumps(value)
     cursor.execute(f"UPDATE players SET {field} = ? WHERE user_id = ?", (value, user_id))
+    conn.commit()
+    conn.close()
+
+def increment_player_field(user_id, field, amount=1):
+    """ฟังก์ชันสำหรับบวกเพิ่มค่าในฐานข้อมูลโดยเฉพาะ (เช่น บวกเวลา, บวกเงิน) โดยไม่สนค่าเดิมในบอท"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    # สั่งให้ SQL เอาค่าเดิมในคอลัมน์นั้น ๆ มาบวกเพิ่มตามจำนวนที่ส่งมาทันที
+    cursor.execute(f"UPDATE players SET {field} = {field} + ? WHERE user_id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 

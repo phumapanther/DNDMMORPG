@@ -138,6 +138,79 @@ class AdminCommands(commands.Cog):
             return
         player_model.update_player_field(user_id, "rank", rank_name)
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนตำแหน่งแรงค์ของ **{name}** เป็น **\"{rank_name}\"** เรียบร้อยแล้วครับ! 🎖️")
+        
+    # ─── 🔍 8. แอดมินส่องดูสเตตัสโปรไฟล์ผู้เล่น + แปลงเวลา วัน/เดือน/ปี (!check_profile) ───
+    @commands.command(name="check_profile")
+    async def check_profile(self, ctx, target: str = None):
+        if target is None:
+            await ctx.send("❓ **วิธีใช้งาน:** `!check_profile [@ชื่อผู้เล่น หรือ ID]`")
+            return
+
+        user_id, name = await self.get_target_user_id(ctx, target)
+        if not user_id:
+            await ctx.send("❌ **ไม่พบผู้ใช้:** รูปแบบไอดีหรือการแท็กชื่อไม่ถูกต้องครับ")
+            return
+
+        player = player_model.get_player(user_id)
+        if not player:
+            await ctx.send(f"❌ ไม่พบข้อมูลตัวละครของ **{name}** ในฐานข้อมูลครับ")
+            return
+
+        # 📋 ดึงค่าฟิลด์มาตรฐานจาก SQL
+        level = player.get("level", 1)
+        exp = player.get("exp", 0)
+        cash = player.get("cash", 0)
+        bank = player.get("bank", 0)
+        hp = player.get("hp", 100)
+        max_hp = player.get("max_hp", 100)
+        armor = player.get("armor", "0")
+        rank = player.get("rank", "นักผจญภัยฝึกหัด")
+        current_state = player.get("current_state", "ปกติ")
+
+        # ⏱️ [ระบบคำนวณและแปลงค่านาทีเวอร์ชันแก้บั๊กตัวเลขหาย]
+        total_mins = player.get("total_online_time", 0)
+        
+        # ตัวแปรตั้งค่าเวลามาตรฐานระบบเกม
+        MINS_IN_HOUR = 60
+        MINS_IN_DAY = 60 * 24        # 1,440 นาที
+        MINS_IN_MONTH = MINS_IN_DAY * 30  # 43,200 นาที (คิดเฉลี่ยเดือนละ 30 วัน)
+        MINS_IN_YEAR = MINS_IN_DAY * 365  # 525,600 นาที
+
+        # ถอดรหัสเวลาแยกก้อนอิสระ มั่นใจได้ว่าเศษนาทีไม่โดนริบหายระหว่างทาง
+        years = total_mins // MINS_IN_YEAR
+        months = (total_mins % MINS_IN_YEAR) // MINS_IN_MONTH
+        days = (total_mins % MINS_IN_MONTH) // MINS_IN_DAY
+        hours = (total_mins % MINS_IN_DAY) // MINS_IN_HOUR
+        mins = total_mins % MINS_IN_HOUR  # เศษนาทีที่เหลืออยู่จริง ๆ
+
+        # ประกอบข้อความแสดงผล (ชิ้นไหนเป็น 0 จะไม่แสดง ยกเว้นถ้านั่งแช่ยังไม่ถึง 1 ชั่วโมงจะโชว์นาทีให้ชัดเจน)
+        time_parts = []
+        if years > 0: time_parts.append(f"`{years}` ปี")
+        if months > 0: time_parts.append(f"`{months}` เดือน")
+        if days > 0: time_parts.append(f"`{days}` วัน")
+        if hours > 0: time_parts.append(f"`{hours}` ชม.")
+        
+        # ถ้านาทีมีค่า หรือยังไม่มีข้อมูลเวลาหน่วยอื่นสะสมเลย ให้ดึงค่าน่าทีขึ้นมาแสดงตรง ๆ
+        if mins > 0 or len(time_parts) == 0: 
+            time_parts.append(f"`{mins}` นาที")
+        
+        formatted_time = " ".join(time_parts)
+
+        # 🎨 วาดการ์ด Embed ตรวจสอบ
+        embed = discord.Embed(
+            title=f"🔎 Admin Inspection — {name}",
+            description=f"📂 ข้อมูลสเตตัสในระบบอย่างละเอียด\n💻 User ID: `{user_id}`",
+            color=0x3182ce
+        )
+        
+        embed.add_field(name="🎖️ ตำแหน่ง / เลเวล", value=f"**Rank:** {rank}\n**Level:** `{level}`\n**EXP:** `{exp:,}`", inline=True)
+        embed.add_field(name="💰 Status การเงิน", value=f"**เงินติดตัว:** `{cash:,}` ทอง\n**ในธนาคาร:** `{bank:,}` ทอง", inline=True)
+        embed.add_field(name="⏳ เวลาออนไลน์สะสม", value=f"⏱️:{formatted_time}", inline=False)
+        embed.add_field(name="🩸 พลังชีวิตและป้องกัน", value=f"**HP:** `{hp}` / `{max_hp}` | **Armor:** `{armor}` แต้ม\n**สถานะตัวละคร:** `{current_state}`", inline=False)
+        
+        embed.set_footer(text=f"ตรวจสอบโดย Admin: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+        
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))
