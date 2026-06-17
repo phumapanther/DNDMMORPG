@@ -4,57 +4,6 @@ import random
 import models.player_model as player_model
 from views.profile_embed import ARMOR_STATS, GAME_CLASSES
 
-# ==========================================================
-# 📊 [SKILL BALANCE CONFIG] คลังศูนย์กลางคุมบาลานซ์สกิลแบบละเอียด 100%
-# ==========================================================
-SKILL_CONFIG = {
-    "Warrior": {
-        "heavy_strike": {
-            "chance_base": 80,          # โอกาสติดพื้นฐาน (%)
-            "chance_lvl_scale": 1,      # โอกาสติดเพิ่มขึ้นต่อเลเวล (เช่น +1% ต่อ 1 เลเวล)
-            "damage_multiplier": 2      # ตัวคูณความเสียหายเมื่อสำเร็จ
-        },
-        "shield_bash": {
-            "duration": 3,              # ระยะเวลาติดสถานะ (เทิร์น)
-            "reduction_base": 0.50,     # อัตราลดดาเมจพื้นฐาน (50%)
-            "reduction_lvl_scale": 0.005 # อัตราลดดาเมจเพิ่มขึ้นต่อเลเวล (+0.5% ต่อ 1 เลเวล)
-        }
-    },
-    "Mage": {
-        "fireball": {
-            "duration": 2,              # ระยะเวลาติดไฟ (เทิร์น)
-            "burn_base": 0.05,          # พลังเผาไหม้พื้นฐานอิงตาม HP บอส (5%)
-            "burn_lvl_scale": 0.002     # พลังเผาเพิ่มขึ้นต่อเลเวล (+0.2% ต่อ 1 เลเวล)
-        },
-        "frostbolt": {
-            "duration_base": 1,         # ระยะเวลาแช่แข็งพื้นฐาน (เทิร์น)
-            "duration_lvl_scale": 0.05,  # ระยะเวลาแช่แข็งเพิ่มขึ้นต่อเลเวล (เช่น ทุก 20 เลเวลเพิ่ม 1 เทิร์น)
-            "damage_reduce": 0.75       # อัตราหักล้างดาเมจของบอส (75%)
-        }
-    },
-    "Rogue": {
-        "backstab": {
-            "chance_base": 50,          # โอกาสติดพื้นฐาน (%)
-            "chance_lvl_scale": 0.5,      # โอกาสติดเพิ่มขึ้นต่อเลเวล (+0.5% ต่อ 1 เลเวล)
-            "damage_reflect_mult": 1.5  # ตัวคูณดาเมจคริติคอลสะท้อนสวนกลับบอส
-        },
-        "evasion": {
-            "chance_base": 100,          # โอกาสวิ่งหนีสำเร็จพื้นฐาน (%)
-            "chance_lvl_scale": 0.0       # โอกาสวิ่งหนีสำเร็จเพิ่มขึ้นต่อเลเวล (+0.5% ต่อ 1 เลเวล)
-        }
-    },
-    "Cleric": {
-        "heal": {
-            "heal_percent_base": 0.40,  # อัตราฮีลพื้นฐานอิงจาก Max HP (40%)
-            "heal_lvl_scale": 0.01      # อัตราฮีลเพิ่มขึ้นต่อเลเวล (+1% ต่อ 1 เลเวล)
-        },
-        "holy_aura": {
-            "chance_base": 50,          # โอกาสบล็อกดาเมจเป็น 0 พืนฐาน (%)
-            "chance_lvl_scale": 1       # โอกาสบล็อกดาเมจเพิ่มขึ้นต่อเลเวล (+1% ต่อ 1 เลเวล)
-        }
-    }
-}
-
 # ตารางสัดส่วนน้ำหนักเหตุการณ์ (อ้างอิงจาก last_event)
 EVENT_WEIGHTS = {
     "village":            [2,   0,        3,      1,       90,       4],
@@ -67,7 +16,9 @@ EVENT_WEIGHTS = {
 }
 EVENT_LIST = ["monster", "village", "treasure", "dungeon", "npc", "trap"]
 
-# โครงสร้างข้อมูลระดับความโหดของมอนสเตอร์
+# ==========================================================
+# 👹 DATA: โครงสร้างข้อมูลระดับความโหดของมอนสเตอร์
+# ==========================================================
 MONSTER_RANKS = {
     "Common":      {"name": "🟢 มอนสเตอร์ทั่วไป (Common)",      "dice_count": 1, "hp_range": (40, 100),   "flee_chance": 85,  "gold_mult": 5,   "exp_reward": 25},
     "Mini-Boss":   {"name": "🟡 มินิบอส (Mini-Boss)",          "dice_count": 2, "hp_range": (100, 500),  "flee_chance": 60,  "gold_mult": 12,  "exp_reward": 80},
@@ -76,11 +27,11 @@ MONSTER_RANKS = {
     "Unbeatable":  {"name": "💀 ไร้พ่าย (Unbeatable)",         "dice_count": 5, "hp_range": (1000, 2000), "flee_chance": 5,   "gold_mult": 100, "exp_reward": 1000}
 }
 
-
 # ==========================================================
-# 🎮 INTERACTIVE VIEWS
+# 🎮 INTERACTIVE VIEWS (เวอร์ชันเสริมระบบความปลอดภัยดิสคอมมู)
 # ==========================================================
 
+# 1. เหตุการณ์ มอนสเตอร์ (Monster) - [มีระบบดักเดิมอยู่แล้ว ปรับปรุงให้ซิงค์คู่กัน]
 class MonsterEventView(View):
     def __init__(self, user_id, member_roles, monster_rank=None, monster_hp=None, active_buffs=None, turn_count=1):
         super().__init__(timeout=60)
@@ -146,19 +97,16 @@ class MonsterEventView(View):
 
         damage_multiplier = 1
 
-        # ─── ⚔️ ระบบคำนวณสกิลช่วงต้นเทิร์น (ดึงลอจิกสเกลจาก Config 100%) ───
         if skill_used == "skill_heavy_strike":
-            w_cfg = SKILL_CONFIG["Warrior"]["heavy_strike"]
-            chance = w_cfg["chance_base"] + (p_lvl * w_cfg["chance_lvl_scale"])
+            chance = 80 + p_lvl
             if random.randint(1, 100) <= chance:
-                damage_multiplier = w_cfg["damage_multiplier"]
-                skill_log += f"✨ **Heavy Strike สำเร็จ!** การโจมตีในเทิร์นนี้จะแรงขึ้น {damage_multiplier} เท่า!\n"
+                damage_multiplier = 2
+                skill_log += "✨ **Heavy Strike สำเร็จ!** การโจมตีในเทิร์นนี้จะแรงขึ้น 2 เท่า!\n"
             else:
                 skill_log += "💨 **Heavy Strike ล้มเหลว!** ทอยเต๋าพลาดสมาธิหลุด\n"
 
         elif skill_used == "skill_evasion":
-            r_cfg = SKILL_CONFIG["Rogue"]["evasion"]
-            chance = r_cfg["chance_base"] + (p_lvl * r_cfg["chance_lvl_scale"])
+            chance = 50 + p_lvl
             if random.randint(1, 100) <= chance:
                 player_model.update_player_field(self.user_id, "current_state", "idle")
                 await interaction.response.edit_message(content=f"💨 **Evasion สำเร็จ!** คุณม้วนตัวหนีออกจากสู้กับ **{self.m_stats['name']}** ได้สำเร็จ!", view=AdventureView(author_id=self.user_id))
@@ -167,8 +115,7 @@ class MonsterEventView(View):
                 skill_log += "⚠️ **Evasion ล้มเหลว!** มอนสเตอร์ดักทางเท้าไว้ได้\n"
 
         elif skill_used == "skill_heal":
-            c_cfg = SKILL_CONFIG["Cleric"]["heal"]
-            heal_percent = c_cfg["heal_percent_base"] + (p_lvl * c_cfg["heal_lvl_scale"])
+            heal_percent = 0.50 + (p_lvl * 0.01)
             heal_amount = int(player["max_hp"] * heal_percent)
             
             if self.monster_rank in ["Main-Boss", "Unbeatable"]:
@@ -181,68 +128,45 @@ class MonsterEventView(View):
             player["hp"] = new_hp 
             skill_log += f"✨ **Heal!** พลังชีวิตของคุณฟื้นฟู `+ {heal_amount}` หน่วย (❤️ HP: {new_hp})\n"
 
-        # แจกสถานะเทิร์นบัฟอิงตามระยะเวลาใน Config
-        if skill_used == "skill_shield_bash": 
-            self.active_buffs["shield_bash"] = SKILL_CONFIG["Warrior"]["shield_bash"]["duration"]
-        elif skill_used == "skill_fireball": 
-            self.active_buffs["fireball"] = SKILL_CONFIG["Mage"]["fireball"]["duration"]
-        elif skill_used == "skill_frostbolt": 
-            f_cfg = SKILL_CONFIG["Mage"]["frostbolt"]
-            self.active_buffs["frostbolt"] = f_cfg["duration_base"] + int(p_lvl * f_cfg["duration_lvl_scale"])
-        elif skill_used == "skill_holy_aura": 
-            self.active_buffs["holy_aura"] = 3
+        if skill_used == "skill_shield_bash": self.active_buffs["shield_bash"] = 3
+        elif skill_used == "skill_fireball": self.active_buffs["fireball"] = 3
+        elif skill_used == "skill_frostbolt": self.active_buffs["frostbolt"] = 1 + int(p_lvl * 0.1)
+        elif skill_used == "skill_holy_aura": self.active_buffs["holy_aura"] = 3
         elif skill_used == "skill_backstab":
-            r_b_cfg = SKILL_CONFIG["Rogue"]["backstab"]
-            if random.randint(1, 100) <= (r_b_cfg["chance_base"] + (p_lvl * r_b_cfg["chance_lvl_scale"])): 
-                self.active_buffs["backstab"] = 1
+            if random.randint(1, 100) <= (50 + p_lvl): self.active_buffs["backstab"] = 1
 
-        # 🔥 คิดเอฟเฟกต์เผาไหม้ของ Fireball
         if self.active_buffs.get("fireball", 0) > 0:
-            m_cfg = SKILL_CONFIG["Mage"]["fireball"]
-            burn_percent = m_cfg["burn_base"] + (p_lvl * m_cfg["burn_lvl_scale"])
+            burn_percent = 0.10 + (p_lvl * 0.005)
             burn_damage = int(self.m_stats["hp_range"][1] * burn_percent)
             self.monster_hp = max(0, self.monster_hp - burn_damage)
             combat_log += f"🔥 *เอฟเฟกต์เผาไหม้:* บอสโดนไฟบอลเผาเสีย HP `- {burn_damage}` หน่วย (บอสเหลือ HP: {self.monster_hp})\n"
             self.active_buffs["fireball"] -= 1
 
-        # ⚔ คุณทอยได้เต๋าชนะบอส
         if player_roll >= monster_roll:
             damage_to_monster = player_roll * 5 * damage_multiplier
             self.monster_hp = max(0, self.monster_hp - damage_to_monster)
             combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}** โจมตีสร้างความเสียหายใส่บอส `- {damage_to_monster}` หน่วย\n"
-        
-        # 👾 บอสทอยได้เต๋าชนะ (คิดดาเมจสวนกลับ)
         else:
             damage_to_player = random.randint(10, 25) + enrage_bonus
             
-            # ❄ สเตตัส Frostbolt
             if self.active_buffs.get("frostbolt", 0) > 0:
-                f_reduce = SKILL_CONFIG["Mage"]["frostbolt"]["damage_reduce"]
-                damage_to_player = int(damage_to_player * (1 - f_reduce))
-                combat_log += f"❄️ *น้ำแข็งเกาะ:* บอสติดแช่แข็ง พลังโจมตีลดลง {int(f_reduce*100)}%! (โดนดาเมจเบา ๆ `- {damage_to_player}`)\n"
-                
-            elif self.active_buffs.get("holy_aura", 0) > 0 and random.randint(1, 100) <= (SKILL_CONFIG["Cleric"]["holy_aura"]["chance_base"] + (p_lvl * SKILL_CONFIG["Cleric"]["holy_aura"]["chance_lvl_scale"])):
+                damage_to_player = 0
+                combat_log += f"❄️ *น้ำแข็งเกาะ:* บอสติดแช่แข็ง พลังโจมตีกลายเป็น `0`!\n"
+            elif self.active_buffs.get("holy_aura", 0) > 0 and random.randint(1, 100) <= (50 + p_lvl):
                 damage_to_player = 0
                 combat_log += "✨ *Holy Aura ทำงาน:* ร่างกายส่องแสงบล็อคพลังโจมตีของบอสกลายเป็น 0!\n"
-                
-            # 🗡 สเตตัส Backstab (บัฟโรกคริสะท้อน)
             elif self.active_buffs.get("backstab", 0) > 0:
                 damage_to_player = int(damage_to_player * 0.2)
-                rogue_reflect = int(player_roll * 5 * SKILL_CONFIG["Rogue"]["backstab"]["damage_reflect_mult"])
-                self.monster_hp = max(0, self.monster_hp - rogue_reflect)
-                combat_log += f"🗡️ *Backstab คุมเชิง:* ดาเมจสวนกลับลดลง 80% (โดนแค่ `- {damage_to_player}`) พร้อมวาร์ปตลบหลังแทงบอสสวนกลับหงายหลังฟาด `- {rogue_reflect}` หน่วย! (บอสเหลือ HP: {self.monster_hp})\n"
-                
+                combat_log += f"🗡️ *Backstab คุมเชิง:* ดาเมจสวนกลับลดลง 80% (โดนแค่ `- {damage_to_player}`)\n"
             elif self.active_buffs.get("shield_bash", 0) > 0:
-                s_b_cfg = SKILL_CONFIG["Warrior"]["shield_bash"]
-                reduction = s_b_cfg["reduction_base"] + (p_lvl * s_b_cfg["reduction_lvl_scale"])
+                reduction = 0.50 + (p_lvl * 0.01)
                 damage_to_player = int(damage_to_player * (1 - min(0.9, reduction)))
-                combat_log += f"🛡️ *Shield Bash บล็อก:* ดาเมจลดลงครอบคลุมเกราะ (โดนแค่ `- {damage_to_player}`)\n"
+                combat_log += f"🛡️ *Shield Bash บล็อก:* ดาเมจลดลงครึ่งหนึ่ง (โดนแค่ `- {damage_to_player}`)\n"
 
             if damage_to_player > 0:
                 player["hp"] = max(0, player["hp"] - damage_to_player)
                 combat_log += f"💥 บอสทอยได้ **🎲 {monster_roll}** สวนกลับกระแทกใส่คุณเสีย HP `- {damage_to_player}` หน่วย\n"
 
-        # หักเทิร์นสถานะบัฟ
         if self.active_buffs.get("frostbolt", 0) > 0: self.active_buffs["frostbolt"] -= 1
         if self.active_buffs.get("holy_aura", 0) > 0: self.active_buffs["holy_aura"] -= 1
         if self.active_buffs.get("shield_bash", 0) > 0: self.active_buffs["shield_bash"] -= 1
@@ -250,14 +174,15 @@ class MonsterEventView(View):
 
         db_updates["hp"] = player["hp"]
 
-        # [ลอจิกแพ้ชนะ เช็กเลเวลอัปคงเดิมตามโค้ดของคุณอาเธอร์...]
         if self.monster_hp <= 0:
             reward = random.randint(30, 70) * self.m_stats["gold_mult"]
             gained_exp = self.m_stats["exp_reward"] + random.randint(5, 15)
+            
             db_updates["cash"] = player["cash"] + reward
             db_updates["last_event"] = "monster"
             db_updates["current_state"] = "idle"
             
+            # 🔑 จุดที่ 1: แผงปุ่มจบเทิร์นชนะ มอบความปลอดภัยด้วยการโยน self.user_id เข้าไปล็อกลายนิ้วมือ
             if player.get("current_state") == "dungeon_choice" or player.get("dungeon_steps", 0) > 0:
                 next_view = AdventureView(author_id=self.user_id) 
                 battle_end_log = f"\n⚔️ มอนสเตอร์ในชั้นนี้ถูกกำจัดแล้ว! เตรียมตัวเดินทางลึกเข้าไปในดันเจี้ยนขั้นถัดไป..."
@@ -336,6 +261,7 @@ class MonsterEventView(View):
             )
         else:
             player_model.update_player_fields(self.user_id, db_updates)
+            
             next_turn = self.turn_count + 1
             await interaction.response.edit_message(
                 content=f"⚔️ **[เทิร์นที่ {self.turn_count}] การต่อสู้ทวีความรุนแรง!**\n👾 ศัตรู: **{self.m_stats['name']}** (🩸 HP คงเหลือ: **{self.monster_hp}**)\n❤️ เลือกร่างกายของคุณ: **{player['hp']}/{player['max_hp']}**\n\n{skill_log}{combat_log}----------------------------------------\nบอสจะแกร่งขึ้นเรื่อยๆ เลือกแอคชั่นหรือสกิลที่จะใช้ถัดไป:",
@@ -371,12 +297,14 @@ class MonsterEventView(View):
         if not await self.interaction_check(interaction): return
         await self.process_turn(interaction, skill_used=interaction.data["custom_id"])
 
+
 # 2. เหตุการณ์ หมู่บ้าน (Village)
 class VillageEventView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
         self.user_id = user_id
 
+    # 🔑 จุดที่ 2: เพิ่มเกราะป้องกันห้องคอมมู บล็อกคนอื่นไม่ให้มากดแผงพักแรมของเจ้าของคำสั่ง
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ คุณไม่ใช่เจ้าของแผงพักแรมนี้! พิมพ์ `!play` เพื่อสั่งงานบอร์ดตัวเองน้า", ephemeral=True)
@@ -397,8 +325,12 @@ class VillageEventView(View):
         
         await interaction.response.edit_message(
             content="💤 คุณนอนพักผ่อนอย่างเต็มอิ่ม ฟื้นฟู HP จนเต็ม!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
-            view=AdventureView(author_id=self.user_id)
+            view=AdventureView(author_id=self.user_id) # ล็อกสิทธิ์ต่อ
         )
+
+    # @discord.ui.button(label="🛒 ซื้อของ", style=discord.ButtonStyle.green)
+    # async def shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     await interaction.response.send_message("🏪 พ่อค้าในหมู่บ้านโบกมือทักทาย (ระบบเปิดร้านค้ากำลังพัฒนาในสเต็ปถัดไป)", ephemeral=True)
 
     @discord.ui.button(label="🚶 ออกเดินทางต่อ", style=discord.ButtonStyle.secondary)
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -407,7 +339,7 @@ class VillageEventView(View):
         
         await interaction.response.edit_message(
             content="🚶 คุณก้าวเท้าเดินออกจากหมู่บ้านมุ่งสู่เส้นทางหลัก...\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
-            view=AdventureView(author_id=self.user_id)
+            view=AdventureView(author_id=self.user_id) # ล็อกสิทธิ์ต่อ
         )
 
 
@@ -417,6 +349,7 @@ class TreasureEventView(View):
         super().__init__(timeout=60)
         self.user_id = user_id
 
+    # 🔑 จุดที่ 3: บล็อกคนอื่นไม่ให้กดแอบขโมยเปิดหีบสมบัติของเรา
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ หีบสมบัตินี้ถูกค้นพบโดยคนอื่น! พิมพ์ `!play` เพื่อออกล่าหีบของตัวเองครับ", ephemeral=True)
@@ -460,6 +393,7 @@ class NpcEventView(View):
         super().__init__(timeout=60)
         self.user_id = user_id
 
+    # 🔑 จุดที่ 4: บล็อกคนป่วน ไม่ให้มากดแทรกคุยตัดหน้า NPC ของเรา
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ NPC กำลังสนทนากับนักผจญภัยท่านอื่นอยู่ รบกวนพิมพ์ `!play` แยกน้า", ephemeral=True)
@@ -480,6 +414,11 @@ class NpcEventView(View):
                 content=f"🧓 NPC ถูกชะตาในตัวคุณ! เขาใจดีมอบเศษเงินทุนกลางจำนวน `{gold_gift}` ทองให้ฟรี!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
+        # elif outcome == "shop":
+        #     await interaction.response.edit_message(
+        #         content="📜 NPC ขอเปิดกระเป๋าสุ่มขายของหายากให้คุณในราคาพิเศษ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
+        #         view=AdventureView(author_id=self.user_id)
+        #     )
         else:
             await interaction.response.edit_message(
                 content="💤 NPC แค่บ่นพึมพำเรื่องฟ้าฝนชวนคุยแก้เหงาเฉยๆ ไม่มีอะไรเกิดขึ้น\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
@@ -502,6 +441,7 @@ class DungeonEventView(View):
         super().__init__(timeout=60)
         self.user_id = user_id
 
+    # 🔑 จุดที่ 5: บล็อกคนแปลกหน้าไม่ให้มาแย่งกดเลือกเดินหน้าบุกหรือถอยหนีในดันเจี้ยนแทนตัวละครเรา
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ นี่คือทางเข้าดันเจี้ยนของนักผจญภัยเจ้าของคำสั่งเท่านั้นครับ!", ephemeral=True)
@@ -535,6 +475,7 @@ class TrapEventView(View):
         self.user_id = user_id
         self.member_roles = member_roles
 
+    # 🔑 จุดที่ 6: ดักสิทธิ์ป้องกันคนอื่นกดทอยลูกเต๋าแก้กับดักแทนเรา
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ กับดักนี้ดีดใส่ตัวละครอื่นอยู่! ตัวเองรอดแล้วอย่ามากดแทนเพื่อนน้าา", ephemeral=True)
@@ -580,6 +521,7 @@ class RespawnView(View):
         super().__init__(timeout=60)
         self.user_id = user_id
 
+    # 🔑 จุดที่ 7: ดักสิทธิ์บล็อกไม่ให้คนแกล้งชุบชีวิตเราเล่น ๆ เพื่อให้เจ้าตัวกดชุบตัวเองเท่านั้น
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("❌ วิญญาณนี้ไม่ใช่ของคุณ! ปล่อยให้เจ้าตัวเขากดฟื้นตัวเองนะครับ", ephemeral=True)
@@ -613,10 +555,12 @@ class RespawnView(View):
 
 # 🧭 VIEW หลักในการเริ่มเดินทาง (!play)
 class AdventureView(View):
+    # 🔑 จุดที่ 8: แก้ __init__ มารับค่าผู้เล่นเจ้าของบอร์ดเพื่อตามล็อกสิทธิ์ยาวไปจนจบลูปตาเดิน
     def __init__(self, author_id: int):
         super().__init__(timeout=60)
         self.author_id = author_id
 
+    # 🔑 จุดที่ 9: เกราะดักสิทธิ์แผงปุ่ม "เริ่มออกเดินทาง" (ปุ่มสีเขียวหลัก) ป้องกันคนป่วนกดเดินแทนเรา
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message("❌ บอร์ดออกเดินทางนี้ไม่ใช่ของคุณ! รบกวนพิมพ์ `!play` เพื่อทริกเกอร์บอร์ดของตัวเองนะครับ", ephemeral=True)
