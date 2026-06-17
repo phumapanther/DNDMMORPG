@@ -21,7 +21,8 @@ NEW_PLAYER_DEFAULTS = {
     "last_death": None,
     "village_cooldown": 0,
     "dungeon_steps": 0,
-    "total_online_time": 0
+    "total_online_time": 0,
+    "arrest_until": 0
     # ➕ อนาคตอยากเพิ่มฟิลด์อะไรใหม่ (เช่น "mana": 100) สามารถพิมพ์เติมต่อท้ายตรงนี้ได้เลย!
 }
 

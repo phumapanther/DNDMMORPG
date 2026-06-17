@@ -24,12 +24,44 @@ def create_bot(bot_type: str):
     bot = commands.Bot(command_prefix="!", intents=intents)
     bot.bot_type = bot_type
 
+    # 🔗⛓️ [เพิ่มระบบระบบดักกลางอากาศ]: ล็อกสิทธิ์ไม่ให้ผู้เล่นติดสถานะจับกุมพิมพ์คำสั่ง
+    # 🔗⛓️ [ระบบดักกลางอากาศ]: ตรวจสอบสถานะและเวลาคุกออโต้
+    @bot.before_invoke
+    async def global_before_invoke(ctx):
+        import time
+
+        if ctx.command.cog and ctx.command.cog.qualified_name == "AdminCommands":
+            return
+
+        if ctx.author.guild_permissions.administrator or ctx.author.id == ctx.guild.owner_id:
+            return
+
+        player = player_model.get_player(ctx.author.id)
+        if player and player.get("current_state") == "arrested":
+            arrest_until = player.get("arrest_until", 0)
+            current_time = int(time.time())
+
+            # ⏳ เช็กว่าหมดเวลาติดคุกหรือยัง
+            if arrest_until and current_time >= int(arrest_until):
+                # 🎉 หมดเวลาแล้ว! ปลดปล่อยตัวอัตโนมัติกลางอากาศเลย
+                player_model.update_player_field(ctx.author.id, "current_state", "idle")
+                player_model.update_player_field(ctx.author.id, "arrest_until", 0)
+                print(f"🕊️ [BEFORE INVOKE] ผู้เล่น {ctx.author.name} หมดเวลาขังคุก สั่งปล่อยตัวอัตโนมัติ")
+                return # ผ่านให้ใช้คำสั่งที่พิมพ์มาได้เลย!
+
+            # 🔗 ถ้ายังไม่หมดเวลา ให้ดีดแจ้งเตือนและบอกเวลาที่เหลือ
+            remaining_seconds = int(arrest_until) - current_time
+            remaining_mins = max(1, remaining_seconds // 60) # แปลงวินาทีเป็นนาทีคร่าวๆ
+
+            await ctx.send(f"❌ **[ปฏิเสธคำสั่ง]** คุณถูกจับกุมอยู่! เหลือเวลาติดคุกอีกประมาณ `{remaining_mins}` นาที 🔗⛓️")
+            raise commands.CommandError("Player is currently arrested.")
+
     @bot.event
     async def on_ready():
         player_model.init_db()
         player_model.auto_update_schema()
         
-        # 🔄 [เพิ่มบรรทัดนี้] สั่งให้บอทลงทะเบียนและอัปเดตระบบสแลชคำสั่งเข้าเซิร์ฟเวอร์จริง
+        # 🔄 สั่งให้บอทลงทะเบียนและอัปเดตระบบสแลชคำสั่งเข้าเซิร์ฟเวอร์จริง
         try:
             synced = await bot.tree.sync()
             print(f"📊 [SYSTEM] ซิงค์ระบบคำสั่งสแลชสำเร็จทั้งหมด {len(synced)} คำสั่ง!")
@@ -47,7 +79,7 @@ def create_bot(bot_type: str):
                 await bot.load_extension("cogs.game_commands")
                 print("⚔️ [Game Bot] โหลดระบบคำสั่งคอมแบทและร้านค้าสำเร็จ!")
                 
-                # 🔥 [เพิ่มบรรทัดนี้] สั่งให้ Arthur โหลดท่อคำสั่งเสกสเตตัสของแอดมินเข้ามาทำงาน
+                # 🔥 สั่งให้ Arthur โหลดท่อคำสั่งเสกสเตตัสของแอดมินเข้ามาทำงาน
                 await bot.load_extension("cogs.admin_commands")
                 print("👑 [Admin Commands] โหลดระบบจัดการฐานข้อมูล SQL สำหรับผู้ดูแลระบบสำเร็จ!")
                 
@@ -80,7 +112,7 @@ def create_bot(bot_type: str):
 
     return custom_start
 
-# 🚀 3. ฟังก์ชันควบคุมการจุดระเบิดเปิดบอท
+# 🚀 3. ฟังก์ชันควบคุมการจุดระเบิดเปิดบอ
 async def main():
     print("⏳ กำลังเตรียมการเปิดระบบในโหมดบายพาส (บอทแรกตัวเดียว)...")
     

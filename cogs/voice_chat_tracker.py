@@ -25,39 +25,28 @@ class VoiceChatTracker(commands.Cog):
             self.voice_exp_tracker.cancel()
 
 
-   # ─── 🔄 ระบบสแกนดักเช็กห้องเสียง + แจก EXP และบันทึกเวลารายคน (ทำงานทุก 1 นาที) ───
     @tasks.loop(minutes=1.0)
     async def voice_exp_tracker(self):
         # """Loop หลังบ้านสแกนหาผู้เล่นเพื่อแจก EXP พร้อมคิดโบนัสคูณ และเก็บระยะเวลาสะสมลงฐานข้อมูล"""
-        # print(f"\n🔍 [VOICE SCAN TIME] ─── เริ่มต้นตรวจสอบรายชื่อห้องเสียงสะสมสเตตัส ───")
         
         for guild in self.bot.guilds:
             for voice_channel in guild.voice_channels:
-                # 🖥️ ดักเช็กตั้งแต่บรรทัดนี้ เพื่อดูว่าบอทมองเห็นห้องเสียงในเซิร์ฟเวอร์ไหม
                 member_count = len(voice_channel.members)
                 
-                # แสดงสถิติห้องเบื้องต้นใน Terminal (ทำให้รู้ว่าบอทไม่ตาย)
                 if member_count > 0:
                     raw_names = ", ".join([m.name for m in voice_channel.members])
-                    # print(f"📡 [SCANNING] เจอห้อง #{voice_channel.name} | มนุษย์ด้านใน: {member_count} คน ({raw_names})")
                 else:
                     continue
                     
                 for member in voice_channel.members:
                     if member.bot: 
                         continue 
-                        
-                    # 🔇 [คอมเมนต์ปิดไว้] ดักเช็กคนปิดไมค์/หูฟัง (หากต้องการกลับมาใช้ ให้ลบเครื่องหมาย # ออก)
-                    # if member.voice.self_deaf or member.voice.self_mute: 
-                    #     print(f"🔇 [SKIP USER] -> {member.name} โดนข้าม (เนื่องจากปิดไมค์ หรือปิดหูฟังอยู่)")
-                    #     continue
                     
                     player = player_model.get_player(member.id)
                     if not player: 
-                        # print(f"👤 [SKIP USER] -> {member.name} โดนข้าม (ไม่มีข้อมูลตัวละครในฐานข้อมูล พิมพ์ !play หรือยัง?)")
                         continue
                         
-                    # ⏱️ [ระบบบันทึกเวลาแยกฟังก์ชัน] สั่งโมเดลหลังบ้านบวกเวลาเพิ่ม 1 นาทีตรงๆ ใน SQL ไม่ทับค่าเก่า
+                    # ⏱️ สั่งโมเดลหลังบ้านบวกเวลาเพิ่ม 1 นาที
                     player_model.increment_player_field(member.id, "total_online_time", 1)
                     
                     # 📈 คำนวณแจก EXP ตามระดับเลเวล
@@ -73,19 +62,11 @@ class VoiceChatTracker(commands.Cog):
                     final_gained_exp = base_exp * multiplier
                     is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
                     
-                    # 🖥️ [PROCESS SUCCESS LOG] ดึงค่าเวลาเดิมจากฐานข้อมูลมา + 1 เพื่อแสดงผลจำลองบนหน้าจอให้แอดมินดูแม่นยำ
                     log_time = player.get("total_online_time", 0) + 1
-                    # print(
-                    #     f"✅ [REWARDED] -> {member.name} สะสมเวลาสำเร็จ! "
-                    #     f"(เวลารวมคาดการณ์: {log_time} นาที | ได้รับ: +{final_gained_exp} EXP)"
-                    # )
                     
                     if is_lv_up:
                         print(f"✨🎉 [LEVEL UP] -> {member.name} เลเวลอัปเป็น Lv.{new_lv} !!")
-                        
-                        # 📢 ค้นหาห้องแชทด้วยชื่อห้องเป๊ะ ๆ 100%
                         target_channel = discord.utils.get(member.guild.channels, name="〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟")
-                        
                         if target_channel:
                             try:
                                 # ส่งข้อความแท็กเรียกผู้เล่นประกาศความสำเร็จลงห้องที่กำหนด
@@ -97,30 +78,56 @@ class VoiceChatTracker(commands.Cog):
                             except Exception as e:
                                 print(f"⚠️ [LEVEL UP ERROR] ไม่สามารถส่งข้อความลงห้องได้เนื่องจาก: {e}")
                         else:
-                            # เคสที่หาห้องไม่เจอ (เช่น แอดมินเผลอเปลี่ยนชื่อห้อง หรือพิมพ์ชื่อห้องในโค้ดตกหล่น)
                             print("❌ [LEVEL UP ERROR] หาห้องแชท '〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟' ไม่พบในเซิร์ฟเวอร์")
                     
                     # 🏅 ตรวจสอบและอัปเดตยศ (Rank) แบบสะสมยศเก่าไม่ลบ
-                    current_actual_level = new_lv if is_lv_up else p_lvl
+                    updated_player = player_model.get_player(member.id)
+                    current_actual_level = updated_player.get("level", 1) if updated_player else p_lvl
+                    
                     is_rank_up, new_rank = player_model.check_and_update_rank(member.id, current_actual_level)
                     
-                    if is_rank_up:
-                        # role_name = f"• นักผจญภัยแรงค์ {new_rank}"
-                        role_name = f"นักผจญภัยแรงค์ {new_rank}"
-                        role = discord.utils.get(guild.roles, name=role_name)
+                    # 🎖️ นิยามลิสต์ยศที่มีอีโมจิครบถ้วนตามผังเซิร์ฟเวอร์
+                    rank_roles_names = [
+                        "• นักผจญภัยแรงค์ F",
+                        "• นักผจญภัยแรงค์ E",
+                        "• นักผจญภัยแรงค์ D",
+                        "• นักผจญภัยแรงค์ C",
+                        "• นักผจญภัยแรงค์ B",
+                        "• นักผจญภัยแรงค์ A",
+                        "• นักผจญภัยแรงค์ S 🗺️",
+                        "• นักผจญภัยแรงค์ SS 💰",
+                        "• นักผจญภัยแรงค์ SSS 👑"
+                    ]
+
+                    # 🧠 ค้นหาข้อความในลิสต์ที่มีอักษร Rank (เช่น "แรงค์ F" หรือ "แรงค์ S") 
+                    role_name = None
+                    for r_name in rank_roles_names:
+                        if f"แรงค์ {new_rank}" in r_name:
+                            role_name = r_name
+                            break
+
+                    if role_name:
+                        current_guild = member.guild
+                        role = discord.utils.get(current_guild.roles, name=role_name)
                         
                         if role:
-                            try:
-                                await member.add_roles(role)
-                                print(f"🏅 [RANK UP] -> แจกยศ {role_name} ให้แก่ {member.name} สำเร็จ")
-                                # 📩 [คอมเมนต์ปิดไว้] ระบบส่งข้อความแจ้งอัปยศทาง DM
-                                # await member.send(f"🏅 **[สมาคมนักผจญภัย]** ปรับระดับยศของคุณในเซิร์ฟเวอร์เป็น **{role_name}** เรียบร้อยแล้ว! ⚔️")
-                            except discord.Forbidden:
-                                print(f"❌ บอทไม่มีสิทธิ์จัดการยศในเซิร์ฟเวอร์: {guild.name}")
-                            except Exception as e:
-                                print(f"⚠️ เกิดข้อผิดพลาดในการแจกยศ: {e}")
-        
-        # print(f"🏁 [SCAN FINISHED] ─── ประมวลผลลูปห้องเสียงรอบนี้เสร็จสิ้น ───\n")
+                            if is_rank_up or (role not in member.roles):
+                                try:
+                                    # 🧹 ล้างยศเก่าที่เคยมีออกให้หมดก่อน เพื่อป้องกันสิทธิ์ทับซ้อน
+                                    for old_role_name in rank_roles_names:
+                                        old_role = discord.utils.get(current_guild.roles, name=old_role_name)
+                                        if old_role and old_role in member.roles and old_role != role:
+                                            try: await member.remove_roles(old_role)
+                                            except: pass
+
+                                    # 🏅 สั่งแอดแจกยศล่าสุดเข้าไปแทนที่
+                                    await member.add_roles(role)
+                                    print(f"🏅 [RANK SYNC/UP] -> แจกยศเริ่มต้น/อัปเดตยศ {role_name} ให้แก่ {member.name} สำเร็จ")
+                                    
+                                except discord.Forbidden:
+                                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศในเซิร์ฟเวอร์: {current_guild.name} (กรุณาลากยศบอทให้อยู่สูงกว่ายศแรงค์)")
+                                except Exception as e:
+                                    print(f"⚠️ เกิดข้อผิดพลาดในการแจกยศห้องเสียง: {e}")
     
     # ─── 💬 ระบบดักฟังช่องแชท แจกเงินเล็กน้อยเมื่อพิมพ์คุย (Text Chat Reward) ───
     @commands.Cog.listener()
