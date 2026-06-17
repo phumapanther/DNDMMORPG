@@ -3,6 +3,25 @@ from discord.ext import commands
 import models.player_model as player_model
 from views.profile_embed import create_profile_embed
 from views.profile_embed import GAME_RACES, GAME_CLASSES
+import asyncio
+
+def allowed_channels(channel_names):
+    async def predicate(ctx):
+        if ctx.channel.name not in channel_names:
+            # 1. ส่งข้อความเตือน
+            msg = await ctx.send(f"❌ **ผิดห้อง!** คำสั่งนี้ใช้ได้เฉพาะในห้อง: `{'`, `'.join(channel_names)}` เท่านั้นครับ")
+            
+            # 2. รอ 5 วินาทีแล้วลบทั้งคำสั่งของผู้เล่น และข้อความเตือนของบอททิ้ง
+            try:
+                await asyncio.sleep(5) # รอ 5 วินาที
+                await msg.delete()     # ลบข้อความบอท
+                await ctx.message.delete() # ลบข้อความที่ผู้เล่นพิมพ์
+            except:
+                pass # กันกรณีบอทไม่มีสิทธิ์ลบ
+            
+            return False
+        return True
+    return commands.check(predicate)
 
 class GameCommands(commands.Cog):
     def __init__(self, bot):
@@ -11,6 +30,7 @@ class GameCommands(commands.Cog):
 
     # ─── 🛒 คำสั่งเปิดร้านค้าและซื้อขายยศ + ระบบกาชาคู่ (สุ่มเผ่า/สุ่มคลาส) (!shop) ───
     @commands.command(name="shop")
+    @allowed_channels(["💸ซื้อยศออโต้💸"])
     @commands.cooldown(1, 3.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 3 วินาที ต่อผู้เล่น 1 คน
     async def shop(self, ctx, action: str = None, item_num: int = None):
         import random
@@ -210,6 +230,7 @@ class GameCommands(commands.Cog):
 
     # ─── 📊 คำสั่งพิมพ์ดูโปรไฟล์ ───
     @commands.command(name="profile", aliases=["info"])
+    @allowed_channels(["🪪เช็คโปรไฟล์🪪"])
     @commands.cooldown(1, 30.0, commands.BucketType.user) # ⏱️ คูลดาวน์ 
     async def profile(self, ctx, member: discord.Member = None):
         target_member = member if member else ctx.author
