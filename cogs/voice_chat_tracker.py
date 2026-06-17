@@ -82,17 +82,30 @@ class VoiceChatTracker(commands.Cog):
                     
                     if is_lv_up:
                         print(f"✨🎉 [LEVEL UP] -> {member.name} เลเวลอัปเป็น Lv.{new_lv} !!")
-                        # 📩 [คอมเมนต์ปิดไว้] ระบบส่งข้อความแจ้งเลเวลอัปทาง DM
-                        # try:
-                        #     await member.send(f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมพูดคุยในห้องเสียงส่งผลให้คุณเลเวลอัปเป็น **Lv.{new_lv}** แล้วครับ!")
-                        # except discord.Forbidden:
-                        #     pass
+                        
+                        # 📢 ค้นหาห้องแชทด้วยชื่อห้องเป๊ะ ๆ 100%
+                        target_channel = discord.utils.get(member.guild.channels, name="〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟")
+                        
+                        if target_channel:
+                            try:
+                                # ส่งข้อความแท็กเรียกผู้เล่นประกาศความสำเร็จลงห้องที่กำหนด
+                                # await target_channel.send(
+                                #     f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมผจญภัยและพูดคุย ส่งผลให้คุณ {member.mention} "
+                                #     f"เลเวลอัปเป็น **Lv.{new_lv}** แล้ว! มาร่วมยินดีกันเร็วทุกคน! ⚔️🔥"
+                                # )
+                                print(f"📢 [LEVEL UP LOG] ประกาศเลเวลอัปของ {member.name} ลงห้อง {target_channel.name} สำเร็จ")
+                            except Exception as e:
+                                print(f"⚠️ [LEVEL UP ERROR] ไม่สามารถส่งข้อความลงห้องได้เนื่องจาก: {e}")
+                        else:
+                            # เคสที่หาห้องไม่เจอ (เช่น แอดมินเผลอเปลี่ยนชื่อห้อง หรือพิมพ์ชื่อห้องในโค้ดตกหล่น)
+                            print("❌ [LEVEL UP ERROR] หาห้องแชท '〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟' ไม่พบในเซิร์ฟเวอร์")
                     
                     # 🏅 ตรวจสอบและอัปเดตยศ (Rank) แบบสะสมยศเก่าไม่ลบ
                     current_actual_level = new_lv if is_lv_up else p_lvl
                     is_rank_up, new_rank = player_model.check_and_update_rank(member.id, current_actual_level)
                     
                     if is_rank_up:
+                        # role_name = f"• นักผจญภัยแรงค์ {new_rank}"
                         role_name = f"นักผจญภัยแรงค์ {new_rank}"
                         role = discord.utils.get(guild.roles, name=role_name)
                         

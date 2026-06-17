@@ -48,31 +48,53 @@ class AdminCommands(commands.Cog):
                 return uid, name
         return None, None
 
-    # ─── 💰 1. คำสั่งเซ็ตเงินติดตัว (!set_cash) ───
+   # ─── 💰 1. คำสั่งเซ็ตเงินติดตัว (!set_cash แบบแปรผัน บวกลบตามค่า) ───
     @commands.command(name="set_cash")
     async def set_cash(self, ctx, target: str = None, amount: int = None):
-        if target is None or amount is None:
-            await ctx.send("❓ **วิธีใช้งาน:** `!set_cash [@ชื่อผู้เล่น หรือ ID] [จำนวน]`")
-            return
-        user_id, name = await self.get_target_user_id(ctx, target)
-        if not user_id or not player_model.get_player(user_id):
-            await ctx.send(f"❌ ไม่พบข้อมูลตัวละครในฐานข้อมูล")
-            return
-        player_model.update_player_field(user_id, "cash", amount)
-        await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนจำนวนทองติดตัวของ **{name}** เป็น `{amount:,}` ทอง เรียบร้อยแล้วครับ! 💸")
+        user_id = ctx.author.id
+        print(f"🪙 [CASH ADMIN DEBUG] แอดมิน {ctx.author.name} เรียกใช้คำสั่ง !set_cash | target: {target} | amount: {amount}")
 
-    # ─── 🏦 2. คำสั่งเซ็ตเงินในธนาคาร (!set_bank) ───
-    @commands.command(name="set_bank")
-    async def set_bank(self, ctx, target: str = None, amount: int = None):
         if target is None or amount is None:
-            await ctx.send("❓ **วิธีใช้งาน:** `!set_bank [@ชื่อผู้เล่น หรือ ID] [จำนวน]`")
+            print("❓ [CASH ADMIN DEBUG] กรอกพารามิเตอร์ไม่ครบ")
+            await ctx.send("❓ **วิธีใช้งาน:** `!set_cash [@ชื่อผู้เล่น หรือ ID] [จำนวน]`\n*(ตัวอย่าง: ใส่ `200` เพื่อบวกเพิ่ม / ใส่ `-200` เพื่อหักเงินออก)*")
             return
+            
         user_id, name = await self.get_target_user_id(ctx, target)
-        if not user_id or not player_model.get_player(user_id):
-            await ctx.send(f"❌ ไม่พบข้อมูลตัวละครในฐานข้อมูล")
+        
+        if not user_id:
+            print(f"❌ [CASH ADMIN DEBUG] ไม่สามารถแปลง target '{target}' เป็น User ID ได้")
+            await ctx.send(f"❌ ไม่พบข้อมูลผู้เล่นคนนี้ในเซิร์ฟเวอร์")
             return
-        player_model.update_player_field(user_id, "bank", amount)
-        await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนเงินในธนาคารของ **{name}** เป็น `{amount:,}` ทอง เรียบร้อยแล้วครับ! 🏦")
+
+        player = player_model.get_player(user_id)
+        if not player:
+            print(f"❌ [CASH ADMIN DEBUG] ไม่พบข้อมูลตัวละครของ ID: {user_id} ในฐานข้อมูล")
+            await ctx.send(f"❌ ไม่พบข้อมูลตัวละครของ **{name}** ในฐานข้อมูล")
+            return
+            
+        # 🪙 1. ดึงจำนวนเงินสดปัจจุบันของผู้เล่นออกมาก่อน
+        current_cash = player.get("cash", 0)
+        
+        # 🧮 2. คำนวณเงินใหม่ (รองรับ 200 เป็นบวก / -200 เป็นลบ)
+        new_cash = current_cash + amount
+        
+        # 🛡️ 3. ระบบความปลอดภัยดักเหนี่ยวรั้ง ไม่ให้เงินสดติดลบต่ำกว่า 0
+        if new_cash < 0:
+            print(f"⚠️ [CASH ADMIN DEBUG] คำนวณแล้วเงินติดลบ ({new_cash}) ระบบดักเซ็ตกลับเป็น 0")
+            new_cash = 0
+
+        # 💾 4. อัปเดตค่าเงินสุทธิที่คำนวณแล้วกลับลงไปในฐานข้อมูล
+        player_model.update_player_field(user_id, "cash", new_cash)
+        print(f"💾 [CASH ADMIN DEBUG] อัปเดตเงิน {name} สำเร็จ จาก {current_cash:,} -> {new_cash:,} ทอง")
+        
+        # 📢 5. แสดงข้อความตอบกลับให้แอดมินทราบสถานะชัดเจน
+        if amount >= 0:
+            print(f"📈 [CASH ADMIN DEBUG] เงื่อนไข: บวกเงินเพิ่ม (+{amount})")
+            await ctx.send(f"⚡ **[Admin]** ได้เพิ่มทองให้กับ **{name}** จำนวน `+ {amount:,}` ทอง\n🪙 (เงินสดปัจจุบัน: `{new_cash:,}` ทอง) 📈💸")
+        else:
+            print(f"📉 [CASH ADMIN DEBUG] เงื่อนไข: หักเงินออก ({amount})")
+            # ใช้ abs(amount) เพื่อเปลี่ยนค่า -200 ให้แสดงผลเป็นตัวเลข 200 สวย ๆ ในแชท
+            await ctx.send(f"⚡ **[Admin]** ได้หักทองของ **{name}** ออกจำนวน `- {abs(amount):,}` ทอง\n🪙 (เงินสดปัจจุบัน: `{new_cash:,}` ทอง) 📉💸")
 
     # ─── 🩸 3. คำสั่งเซ็ตเลือดปัจจุบัน (!set_hp) ───
     @commands.command(name="set_hp")

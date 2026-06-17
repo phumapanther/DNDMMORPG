@@ -86,19 +86,43 @@ class AdventureZone(commands.Cog):
             view.add_item(discord.ui.Button(label="⚔️ คลิกเพื่อเข้าสู่มิติผจญภัย", url=f"https://discord.com/channels/{guild.id}/{adv_channel.id}"))
             await status_msg.edit(content=f"✨ **[ประตูมิติเปิดออกแล้ว!]** ประตูมิติส่วนตัวของคุณจัดเตรียมเสร็จสิ้นแล้วครับคุณ {author.mention}", view=view)
 
-            # ⏱️ ระบบดักตรวจจับการเคลื่อนไหวเพื่อทำลายห้อง
-            def check(message):
+           # ⏱️ ระบบดักตรวจจับความเคลื่อนไหว (รองรับทั้งการพิมพ์และการกดปุ่ม/โต้ตอบ)
+            def check_message(message):
                 return message.channel.id == adv_channel.id
+
+            def check_interaction(interaction):
+                return interaction.channel_id == adv_channel.id
 
             while True:
                 try:
-                    # ถ้าระหว่าง 1 นาทีมีข้อความพิมพ์แชทเข้ามา จะทำการต่อเวลาลูปนับหนึ่งใหม่ทันที
-                    await self.bot.wait_for('message', check=check, timeout=60.0)
+                    # สร้างงานพร้อมกัน 2 ขา: ขาหนึ่งรอข้อความ อีกขารอการกดปุ่ม
+                    done, pending = await asyncio.wait(
+                        [
+                            asyncio.create_task(self.bot.wait_for('message', check=check_message)),
+                            asyncio.create_task(self.bot.wait_for('interaction', check=check_interaction))
+                        ],
+                        timeout=60.0,
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    # เคลียร์งานที่ยังค้างคาอยู่ทิ้งไปเพื่อเริ่มนับ 1 นาทีใหม่ในลูปถัดไป
+                    for task in pending:
+                        task.cancel()
+
+                    # ถ้ามีเหตุการณ์อย่างใดอย่างหนึ่งเกิดขึ้นมา (done ไม่ว่าง) แปลว่ายังแอคทีฟอยู่ -> วนลูปต่อเวลาทันที
+                    if done:
+                        continue
+                    else:
+                        # กรณีหลุดมาโดยไม่มีอะไรทำ (Timeout)
+                        raise asyncio.TimeoutError
+
                 except asyncio.TimeoutError:
-                    # 💥 เมื่อห้องเงียบสนิทครบ 1 นาที สั่งลบห้องทิ้งทันที
-                    await adv_channel.delete(reason="ห้องผจญภัยไม่มีการเคลื่อนไหวครบ 1 นาที")
-                    
-                    # 🔥 สำคัญที่สุด: ลบไอดีออกจากทะเบียน เพื่อปลดล็อกให้เขากลับมาใช้คำสั่ง !adv สร้างห้องใหม่ได้อีกครั้ง
+                    # 💥 เมื่อห้องเงียบสนิทครบ 1 นาที ไม่มีทั้งการพิมพ์และกดปุ่ม สั่งลบห้องทันที
+                    try:
+                        await adv_channel.delete(reason="ห้องผจญภัยไม่มีการเคลื่อนไหวครบ 1 นาที")
+                    except:
+                        pass
+                        
                     if author.id in self.active_rooms:
                         del self.active_rooms[author.id]
                     
@@ -106,7 +130,7 @@ class AdventureZone(commands.Cog):
                         await ctx.send(f"🌌 **[มิติสลาย]** มิติส่วนตัวของคุณ {author.mention} ได้สลายหายไปเรียบร้อยแล้วเนื่องจากไม่มีการเคลื่อนไหว", delete_after=5.0)
                     except:
                         pass
-                    break # หลุดออกจากลูปทำงาน
+                    break
 
         except discord.Forbidden:
             await status_msg.edit(content="❌ **บอทเกิดข้อผิดพลาด:** บอทไม่มีสิทธิ์ในการจัดการห้องแชท")

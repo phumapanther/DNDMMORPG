@@ -1,20 +1,42 @@
+# player_model.py
 import sqlite3
 import json
 
 DB_NAME = "game_data.db"
 
+# 🌟 [จุดปรับแต่งก้อนเดียวจบ] กำหนดสเตตัสเริ่มต้นของ "ผู้เล่นใหม่" ทั้งหมดไว้ที่นี่
+# อนาคตอยากเพิ่มฟิลด์ หรือปรับเงินเริ่มต้น (เช่น จาก 500 เป็น 1000) มาแก้ตรงนี้ได้เลยครับ!
+NEW_PLAYER_DEFAULTS = {
+    "level": 1,
+    "exp": 0,
+    "rank": "F",
+    "hp": 100,
+    "max_hp": 100,
+    "cash": 20000,          # 🪙 ปรับเงินเริ่มต้นตรงนี้ได้เลยครับคุณอาเธอร์!
+    "bank": 0,
+    "inventory": "[]",     # เก็บเป็นโครงสร้างข้อความ JSON
+    "armor": "None",
+    "current_state": "idle",
+    "last_event": "none",
+    "last_death": None,
+    "village_cooldown": 0,
+    "dungeon_steps": 0,
+    "total_online_time": 0
+    # ➕ อนาคตอยากเพิ่มฟิลด์อะไรใหม่ (เช่น "mana": 100) สามารถพิมพ์เติมต่อท้ายตรงนี้ได้เลย!
+}
+
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # 1. สร้างตารางพื้นฐาน (ถ้ายังไม่มี)
+    # 1. สร้างตารางพื้นฐาน
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS players (
             user_id INTEGER PRIMARY KEY,
             level INTEGER DEFAULT 1,
             hp INTEGER DEFAULT 100,
             max_hp INTEGER DEFAULT 100,
-            cash INTEGER DEFAULT 500,
+            cash INTEGER DEFAULT 20000,
             bank INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             armor TEXT DEFAULT 'None',
@@ -26,82 +48,68 @@ def init_db():
         )
     """)
     
-    # 🔍 ดึงรายชื่อคอลัมน์ปัจจุบันขึ้นมาสแกน เพื่อทำ Auto-Migration
-    cursor.execute("PRAGMA table_info(players)")
-    columns = [column[1] for column in cursor.fetchall()]
-    
-    # 🎯 [Auto-Migration 1] เพิ่มคอลัมน์ exp (ถ้ายังไม่มีใน DB เก่า)
-    if "exp" not in columns:
-        try:
-            cursor.execute("ALTER TABLE players ADD COLUMN exp INTEGER DEFAULT 0;")
-            print("📊 [SQL Migration] เพิ่มคอลัมน์ 'exp' สำเร็จ!")
-        except sqlite3.OperationalError:
-            pass
-
-    # 🎯 [Auto-Migration 2] เพิ่มคอลัมน์ rank มารองรับระบบยศดิสคอร์ด (ถ้ายังไม่มีใน DB เก่า)
-    if "rank" not in columns:
-        try:
-            cursor.execute("ALTER TABLE players ADD COLUMN rank TEXT DEFAULT 'F';")
-            print("📊 [SQL Migration] เพิ่มคอลัมน์ 'rank' เข้าสู่ฐานข้อมูลเก่าสำเร็จ!")
-        except sqlite3.OperationalError:
-            pass
-            
     conn.commit()
     conn.close()
+    
+    # 2. รันระบบอัปเดตโครงสร้างคอลัมน์ให้อัตโนมัติ (ขยายตาม NEW_PLAYER_DEFAULTS)
+    auto_update_schema()
 
 def get_player(user_id):
     conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row # 🔥 ใช้ระบบดึงข้อมูลแบบ Dict-Key ป้องกันเรื่องจำลำดับ Row พลาด
+    conn.row_factory = sqlite3.Row 
     cursor = conn.cursor()
     
-    # 🌟 [ปรับจุดนี้] ใช้ * เพื่อสั่งดึงข้อมูลมา "ทุกคอลัมน์" ที่มีอยู่ในตาราง players ทันที!
-    cursor.execute("""
-        SELECT * FROM players WHERE user_id = ?
-    """, (user_id,))
+    cursor.execute("SELECT * FROM players WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     
     if row is None:
-        # ตรง INSERT นี้เรายังต้องระบุฟิลด์ชัดเจนเผื่อเวลาสร้างไอดีใหม่ให้ระบบรู้ว่ายัดค่าลงช่องไหนครับ
-        cursor.execute("""
-            INSERT INTO players (user_id, level, exp, rank, hp, max_hp, cash, bank, inventory, armor, current_state, last_event, last_death, village_cooldown, dungeon_steps, total_online_time) 
-            VALUES (?, 1, 0, 'F', 100, 100, 500, 0, '[]', 'None', 'idle', 'none', NULL, 0, 0, 0)
-        """, (user_id,))
+        # 🤖 ลอจิกอัจฉริยะ: ประกอบร่างคำสั่ง INSERT อัตโนมัติตาม NEW_PLAYER_DEFAULTS บนสุด
+        fields = ["user_id"] + list(NEW_PLAYER_DEFAULTS.keys())
+        placeholders = ["?"] * len(fields)
+        
+        # ดึงค่าจากตัวแปรด้านบนมาเตรียมยัดลง DB
+        values = [user_id]
+        for key, val in NEW_PLAYER_DEFAULTS.items():
+            # ดักเคสพิเศษพวกตัวแปรเลขที่อยากให้ยืดหยุ่นในโค้ด
+            if key == "cash": val = NEW_PLAYER_DEFAULTS["cash"]
+            values.append(val)
+            
+        sql_insert = f"INSERT INTO players ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
+        
+        cursor.execute(sql_insert, values)
         conn.commit()
         conn.close()
-        return {
-            "level": 1, "exp": 0, "rank": "F", "hp": 100, "max_hp": 100, "cash": 500, "bank": 0,
-            "inventory": [], "armor": "None", "current_state": "idle", "last_event": "none", "last_death": None, "village_cooldown": 0, "dungeon_steps": 0,
-            "total_online_time": 0
-        }
+        
+        # สร้างก้อนคืนค่าให้บอทในรอบแรก โดยแปลง inventory กลับเป็นลิสต์ธรรมดา
+        init_profile = NEW_PLAYER_DEFAULTS.copy()
+        init_profile["inventory"] = json.loads(init_profile["inventory"])
+        return init_profile
     
     conn.close()
     
-    # แปลง Row วัตถุให้เป็น Standard Python Dictionary เพื่อให้ไฟล์อื่นดึงไป .get() ได้ไม่เออร์เรอร์
     p_dict = dict(row)
     p_dict["inventory"] = json.loads(p_dict["inventory"])
     return p_dict
 
+# ─── 💾 โซนฟังก์ชันจัดการสเตตัสความปลอดภัย ───
+
 def update_player_field(user_id, field, value):
-    """ฟังก์ชันอัปเดตฟิลด์เดี่ยว (ดึงกลับมาช่วยซัพพอร์ตระบบเก่าไม่ให้พัง)"""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    if isinstance(value, list):
+    if isinstance(value, list) or isinstance(value, dict):
         value = json.dumps(value)
     cursor.execute(f"UPDATE players SET {field} = ? WHERE user_id = ?", (value, user_id))
     conn.commit()
     conn.close()
 
 def increment_player_field(user_id, field, amount=1):
-    """ฟังก์ชันสำหรับบวกเพิ่มค่าในฐานข้อมูลโดยเฉพาะ (เช่น บวกเวลา, บวกเงิน) โดยไม่สนค่าเดิมในบอท"""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # สั่งให้ SQL เอาค่าเดิมในคอลัมน์นั้น ๆ มาบวกเพิ่มตามจำนวนที่ส่งมาทันที
     cursor.execute(f"UPDATE players SET {field} = {field} + ? WHERE user_id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 
 def update_player_fields(user_id, updates: dict):
-    """ฟังก์ชันอัปเดตฟิลด์หลายๆ ตัวพร้อมกันในคิวรีเดียว ช่วยลดปัญหาคอขวด DB หน่วง"""
     if not updates: return
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -109,7 +117,7 @@ def update_player_fields(user_id, updates: dict):
     set_clauses = []
     values = []
     for field, value in updates.items():
-        if isinstance(value, list):
+        if isinstance(value, list) or isinstance(value, dict):
             value = json.dumps(value)
         set_clauses.append(f"{field} = ?")
         values.append(value)
@@ -121,23 +129,17 @@ def update_player_fields(user_id, updates: dict):
     conn.close()
 
 def add_exp(user_id, exp_to_add):
-    """ฟังก์ชันคำนวณ EXP โครงสร้างใหม่ รองรับลูปเคลียร์เกมใน 3 เดือน (Max Lv.100)"""
     player = get_player(user_id) 
-    
     current_exp = player.get("exp", 0) + exp_to_add
     current_level = player.get("level", 1)
     max_hp = player.get("max_hp", 100)
-    
     level_up_occurred = False
     
     while True:
         if current_level >= 100:
-            current_exp = 0 # ล็อกเมื่อเลเวลเต็ม 100
+            current_exp = 0
             break
-            
-        # 🎯 สูตรเสพสมดุล: (เลเวลปัจจุบัน ยกกำลัง 2) คูณด้วย 70
         required_exp = (current_level ** 2) * 70
-        
         if current_exp >= required_exp:
             current_exp -= required_exp
             current_level += 1
@@ -148,17 +150,12 @@ def add_exp(user_id, exp_to_add):
             
     update_player_field(user_id, "exp", current_exp)
     update_player_field(user_id, "level", current_level)
-    
     if level_up_occurred:
         update_player_field(user_id, "max_hp", max_hp)
         update_player_field(user_id, "hp", max_hp) 
-        
     return level_up_occurred, current_level, current_exp
 
-# ─── 🏅 ฟังก์ชันคำนวณระบบยศอัตโนมัติ (Rank System) ───
-
 def calculate_rank(level):
-    """คำนวณหากลุ่มยศที่ถูกต้องตามเกณฑ์เลเวล"""
     if level >= 100: return "SSS"
     elif level >= 80: return "A"
     elif level >= 50: return "B"
@@ -168,45 +165,59 @@ def calculate_rank(level):
     else: return "F"
 
 def check_and_update_rank(user_id, current_level):
-    """ตรวจสอบยศปัจจุบันใน DB ถ้าเลเวลถึงเกณฑ์ใหม่ ให้ทำการอัปเดตลงตารางทันที"""
     player = get_player(user_id)
-    if not player:
-        return False, "F"
-    
+    if not player: return False, "F"
     old_rank = player.get("rank", "F")
     new_rank = calculate_rank(current_level)
-    
     if old_rank != new_rank:
         update_player_field(user_id, "rank", new_rank)
         return True, new_rank
-        
     return False, old_rank
 
+# ─── ⚙️ โซนระบบขยายข้อมูลอัตโนมัติสำหรับอนาคต (Scalability Zone) ───
+
 def auto_update_schema():
-    """ฟังก์ชันเช็กโครงสร้างตารางออโต้ ถ้ามีฟิลด์ใหม่เพิ่มเข้ามา บอทจะทำการเพิ่มคอลัมน์ให้เองทันที"""
+    """ระบบตรวจจับคอลัมน์อัตโนมัติ อิงจากตาราง NEW_PLAYER_DEFAULTS"""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # 1. ดึงรายชื่อคอลัมน์ปัจจุบันทั้งหมดที่มีอยู่ในตาราง players มาเช็ก
     cursor.execute("PRAGMA table_info(players);")
-    columns = [row[1] for row in cursor.fetchall()] # row[1] คือชื่อคอลัมน์
+    columns = [row[1] for row in cursor.fetchall()]
     
-    # 2. รายการคอลัมน์ใหม่ ๆ ที่เราอยากจะเพิ่มในอนาคต (ถ้ามีฟิลด์ใหม่ ให้มาเติมต่อท้ายลิสต์นี้ได้เลย)
-    required_columns = {
-        "total_online_time": "INT DEFAULT 0",
-        # "mana": "INT DEFAULT 100",        <-- สมมติวันหลังอยากเพิ่มมาเติมตรงนี้ได้เลย
-        # "guild_id": "TEXT DEFAULT 'None'" <-- สมมติวันหลังอยากเพิ่ม
-    }
-    
-    # 3. ลูปเช็กคอลัมน์ต่อคอลัมน์
-    for col_name, col_type in required_columns.items():
+    # ดักจับคอลัมน์เผื่อเก่าที่จำเป็นต้องมี
+    if "exp" not in columns:
+        try: cursor.execute("ALTER TABLE players ADD COLUMN exp INTEGER DEFAULT 0;")
+        except: pass
+    if "rank" not in columns:
+        try: cursor.execute("ALTER TABLE players ADD COLUMN rank TEXT DEFAULT 'F';")
+        except: pass
+
+    # ลูปสแกนหาตัวแปรใหม่ ๆ ในคลังจอง NEW_PLAYER_DEFAULTS ถ้าไม่มีในเครื่องคลาวด์ จะยัดคำสั่งงอกคอลัมน์ให้เองทันที
+    for col_name, default_val in NEW_PLAYER_DEFAULTS.items():
         if col_name not in columns:
+            col_type = "TEXT" if isinstance(default_val, str) else "INTEGER"
+            d_val = f"'{default_val}'" if isinstance(default_val, str) else default_val
+            if default_val is None: d_val = "NULL"
+            
             try:
-                # สั่งรันคำสั่ง SQL ALTER TABLE เพื่อสั่งเพิ่มคอลัมน์ใหม่สด ๆ บนเครื่องคลาวด์
-                cursor.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type};")
-                print(f"⚙️ [DB MIGRATION] เพิ่มคอลัมน์ใหม่ '{col_name}' เข้าสู่ตารางเรียบร้อยแล้ว!")
+                cursor.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type} DEFAULT {d_val};")
+                print(f"⚙️ [FUTURE-MIGRATION] งอกคอลัมน์ใหม่ '{col_name}' สำเร็จ!")
             except Exception as e:
-                print(f"⚠️ [DB MIGRATION ERROR] ไม่สามารถเพิ่มคอลัมน์ {col_name} ได้: {e}")
+                print(f"⚠️ [MIGRATION ERROR] ไม่สามารถงอกฟิลด์ {col_name} ได้: {e}")
                 
     conn.commit()
     conn.close()
+
+def execute_custom_game_logic(user_id, action_type, **kwargs):
+    """
+    🔮 [จุดเตรียมพร้อมเพิ่มคำสั่งใหม่ในอนาคต]
+    คุณอาเธอร์สามารถมาเขียนดักพวกคำสั่ง Event แปลก ๆ หรือเงื่อนไขใหม่ที่นี่ได้เลยโดยไม่กระทบโครงสร้างหลัก
+    """
+    player = get_player(user_id)
+    if not player: return False
+    
+    if action_type == "custom_buff":
+        # ตัวอย่างลอจิก: สั่งเพิ่มพลังงานหรือบัฟในอนาคต
+        pass
+        
+    return True
