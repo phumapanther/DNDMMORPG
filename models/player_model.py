@@ -1,6 +1,7 @@
 # player_model.py
 import sqlite3
 import json
+import time # อย่าลืม import time เข้ามานะครับ
 
 DB_NAME = "game_data.db"
 
@@ -222,3 +223,37 @@ def execute_custom_game_logic(user_id, action_type, **kwargs):
         pass
         
     return True
+
+# เพิ่มฟังก์ชันนี้ใน player_model.py
+def check_jail_status(user_id):
+    player = get_player(user_id)
+    if player and player["current_state"] == "arrested":
+        # ถ้าเวลาปัจจุบัน เกินกว่าเวลาที่กำหนดใน DB
+        if time.time() >= player["arrest_until"]:
+            update_player_fields(user_id, {"current_state": "idle", "arrest_until": 0})
+            return True # หลุดจากคุกแล้ว
+    return False # ยังติดคุกอยู่
+
+from discord.ext import tasks
+
+@tasks.loop(minutes=1.0)
+async def jail_checker(self):
+    # ดึงทุกคนที่สถานะเป็น 'arrested'
+    conn = sqlite3.connect("game_data.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM players WHERE current_state = 'arrested' AND arrest_until <= ?", (time.time(),))
+    jailed_players = cursor.fetchall()
+    
+    for row in jailed_players:
+        user_id = row[0]
+        # สั่งปลดคุก
+        update_player_fields(user_id, {"current_state": "idle", "arrest_until": 0})
+        print(f"🔓 ปลดคุกผู้เล่น {user_id} อัตโนมัติ")
+    conn.close()
+
+def execute_raw_sql(sql):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    conn.commit()  # ต้องมีบรรทัดนี้ ไม่งั้นข้อมูลไม่เซฟ
+    conn.close()

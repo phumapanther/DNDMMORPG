@@ -79,10 +79,12 @@ def create_bot(bot_type: str):
                 await bot.load_extension("cogs.game_commands")
                 print("⚔️ [Game Bot] โหลดระบบคำสั่งคอมแบทและร้านค้าสำเร็จ!")
                 
-                # 🔥 สั่งให้ Arthur โหลดท่อคำสั่งเสกสเตตัสของแอดมินเข้ามาทำงาน
                 await bot.load_extension("cogs.admin_commands")
-                print("👑 [Admin Commands] โหลดระบบจัดการฐานข้อมูล SQL สำหรับผู้ดูแลระบบสำเร็จ!")
-                
+                print("👑 [Admin Commands] โหลดระบบคำสั่งผู้ดูแลระบบสำเร็จ!")
+
+                await bot.load_extension("cogs.player_commands")
+                print("🕺[Player Commands] โหลดระบบคำสั่งผู้เล่นสำเร็จ!")
+
                 await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Bypass Mode] โน้ตระบบลูปห้องเสียงและฟาร์มแชทมาให้ Arthur รันแทนชั่วคราวสำเร็จ!")
                 

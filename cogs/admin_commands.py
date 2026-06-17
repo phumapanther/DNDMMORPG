@@ -411,8 +411,21 @@ class AdminCommands(commands.Cog):
             await ctx.send("❓ **วิธีใช้งาน:** `!give_cash_all [จำนวนทอง]`")
             return
         
-        player_model.execute_raw_sql(f"UPDATE players SET cash = cash + {amount};")
+        # ตรวจสอบว่าโมเดลมีการ commit หรือไม่
+        sql = f"UPDATE players SET cash = cash + {amount}"
+        player_model.execute_raw_sql(sql)
+        await ctx.send(f"📢 **[ประกาศ]** แจกทองทุกคนคนละ `{amount:,}` ทอง!")
+
+    
+    @commands.command(name="give_bank_all")
+    async def give_bank_all(self, ctx, amount: int = None):
+        if amount is None:
+            await ctx.send("❓ **วิธีใช้งาน:** `!give_bank_all [จำนวนทอง]`")
+            return
+        
+        sql = f"UPDATE players SET bank = bank + {amount}"
         print(f"🪙 [ADMIN LOG] แจกเงินผู้เล่นทุกคนคนละ +{amount:,} ทอง")
+        player_model.execute_raw_sql(sql)
         await ctx.send(f"📢 **[ประกาศจากสมาคม]** ท่านแอดมินได้ทำการแจกทองให้กับนักผจญภัยทุกคนในฐานข้อมูล จำนวน `+ {amount:,}` ทอง! 🪙✨")
 
     # ─── 🚫 12. คำสั่งแอดมิน: สั่งจับกุมแบบกำหนดเวลา / ปลดปล่อยผู้เล่น (!arrest) ───

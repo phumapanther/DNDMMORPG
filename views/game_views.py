@@ -338,7 +338,7 @@ class MonsterEventView(View):
             player_model.update_player_fields(self.user_id, db_updates)
             next_turn = self.turn_count + 1
             await interaction.response.edit_message(
-                content=f"⚔️ **[เทิร์นที่ {self.turn_count}] การต่อสู้ทวีความรุนแรง!**\n👾 ศัตรู: **{self.m_stats['name']}** (🩸 HP คงเหลือ: **{self.monster_hp}**)\n❤️ เลือกร่างกายของคุณ: **{player['hp']}/{player['max_hp']}**\n\n{skill_log}{combat_log}----------------------------------------\nบอสจะแกร่งขึ้นเรื่อยๆ เลือกแอคชั่นหรือสกิลที่จะใช้ถัดไป:",
+                content=f"⚔️ **[เทิร์นที่ {self.turn_count}] การต่อสู้ทวีความรุนแรง!**\n👾 ศัตรู: **{self.m_stats['name']}** (🩸 HP คงเหลือ: **{self.monster_hp}**)\n❤️ เลือดร่างกายของคุณ: **{player['hp']}/{player['max_hp']}**\n\n{skill_log}{combat_log}----------------------------------------\nบอสจะแกร่งขึ้นเรื่อยๆ เลือกแอคชั่นหรือสกิลที่จะใช้ถัดไป:",
                 view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn)
             )
 
@@ -383,14 +383,14 @@ class VillageEventView(View):
             return False
         return True
 
-    @discord.ui.button(label="🛏️ พักแรม (500 ทอง)", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🛏️ พักแรม (2500 ทอง)", style=discord.ButtonStyle.primary)
     async def rest(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
-        if player["cash"] < 500:
+        if player["cash"] < 2500:
             await interaction.response.send_message("❌ เงินสดกลางไม่พอจ่ายค่าห้องนอน!", ephemeral=True)
             return
             
-        player_model.update_player_field(self.user_id, "cash", player["cash"] - 500)
+        player_model.update_player_field(self.user_id, "cash", player["cash"] - 2500)
         player_model.update_player_field(self.user_id, "hp", player["max_hp"])
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "village")
@@ -426,6 +426,12 @@ class TreasureEventView(View):
     @discord.ui.button(label="📦 เปิดกล่องสมบัติ", style=discord.ButtonStyle.success)
     async def open_box(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
+        # 🗡️ เช็กว่าผู้เล่นมีโรล Rogue หรือไม่
+        is_rogue = any(role.name == "Rogue" for role in interaction.user.roles)
+        
+        # ถ้าเป็น Rogue จะไม่โดนกับดัก (is_trap จะเป็น False เสมอ)
+        is_trap = random.random() < 0.25 and not is_rogue
+
         is_trap = random.random() < 0.25
         if is_trap:
             player_model.update_player_field(self.user_id, "current_state", "idle")
@@ -590,7 +596,7 @@ class RespawnView(View):
     async def respawn(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
         respawn_hp = int(player["max_hp"] * 0.3)
-        penalty_fee = 500
+        penalty_fee = 2500
         new_cash = player.get("cash", 0) - penalty_fee
         
         player_model.update_player_field(self.user_id, "hp", respawn_hp)
