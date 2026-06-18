@@ -1,27 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
-
-import asyncio # อย่าลืม import asyncio เข้ามาที่หัวไฟล์ด้วยครับ
-
-def allowed_channels(channel_names):
-    async def predicate(ctx):
-        if ctx.channel.name not in channel_names:
-            # 1. ส่งข้อความเตือน
-            msg = await ctx.send(f"❌ **ผิดห้อง!** คำสั่งนี้ใช้ได้เฉพาะในห้อง: `{'`, `'.join(channel_names)}` เท่านั้นครับ")
-            
-            # 2. รอ 5 วินาทีแล้วลบทั้งคำสั่งของผู้เล่น และข้อความเตือนของบอททิ้ง
-            try:
-                await asyncio.sleep(5) # รอ 5 วินาที
-                await msg.delete()     # ลบข้อความบอท
-                await ctx.message.delete() # ลบข้อความที่ผู้เล่นพิมพ์
-            except:
-                pass # กันกรณีบอทไม่มีสิทธิ์ลบ
-            
-            return False
-        return True
-    return commands.check(predicate)
-
+from utils import not_arrested, allowed_channels  # 👈 ใส่บรรทัดนี้ลงไป
 class AdventureZone(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -29,6 +9,7 @@ class AdventureZone(commands.Cog):
         # เพื่อล็อกให้ 1 คนสร้างได้แค่ 1 ห้องจนกว่าจะโดนทำลาย
         self.active_rooms = {}
 
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="adv")
     @allowed_channels(["⚔-เริ่มเกม-⚔"])
     @commands.cooldown(1, 5.0, commands.BucketType.user)

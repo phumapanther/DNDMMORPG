@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from models import player_model  # ดึงโมเดลจัดการฐานข้อมูลมาใช้งาน
+from utils import not_arrested, allowed_channels  # 👈 ใส่บรรทัดนี้ลงไป
 import random
 
 class AdminCommands(commands.Cog):
@@ -34,6 +35,7 @@ class AdminCommands(commands.Cog):
         return True
 
     # ─── 💰 1. คำสั่งเซ็ตเงินติดตัว (!set_cash แบบแปรผัน บวกลบตามค่า) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_cash")
     async def set_cash(self, ctx, target: discord.User = None, amount: int = None):
         print(f"🪙 [CASH ADMIN DEBUG] แอดมิน {ctx.author.name} เรียกใช้คำสั่ง !set_cash | target: {target} | amount: {amount}")
@@ -64,6 +66,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"⚡ **[Admin]** ได้หักทองของ **{name}** ออกจำนวน `- {abs(amount):,}` ทอง\n🪙 (เงินสดปัจจุบัน: `{new_cash:,}` ทอง) 📉💸")
 
     # ─── 🩸 2. คำสั่งเซ็ตเลือดปัจจุบัน (!set_hp) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_hp")
     async def set_hp(self, ctx, target: discord.User = None, amount: int = None):
         if target is None or amount is None:
@@ -78,6 +81,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนค่าพลังชีวิต (HP) ของ **{name}** เป็น `{amount:,}` HP เรียบร้อยแล้วครับ! 🩸")
 
     # ─── 🧪 3. คำสั่งเซ็ตเลือดสูงสุด (!set_max_hp) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_max_hp")
     async def set_max_hp(self, ctx, target: discord.User = None, amount: int = None):
         if target is None or amount is None:
@@ -92,6 +96,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนขีดจำกัดเลือดสูงสุด (Max HP) ของ **{name}** เป็น `{amount:,}` Max HP เรียบร้อยแล้วครับ! 🧪")
 
     # ─── 🛡️ 4. คำสั่งเซ็ตค่าเกราะ (!set_armor) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_armor")
     async def set_armor(self, ctx, target: discord.User = None, amount: str = "None"):
         if target is None:
@@ -106,6 +111,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนชุดเกราะของ **{name}** เป็นคีย์ `{amount}` เรียบร้อยแล้วครับ! 🛡️")
 
     # ─── 📈 5. คำสั่งเซ็ตค่า EXP (!set_exp) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_exp")
     async def set_exp(self, ctx, target: discord.User = None, amount: int = None):
         if target is None or amount is None:
@@ -120,6 +126,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนค่า EXP ของ **{name}** เป็น `{amount:,}` EXP เรียบร้อยแล้วครับ! 🎯")
 
     # ─── 🎖️ 6. คำสั่งเซ็ตแรงค์ (!set_rank) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_rank")
     async def set_rank(self, ctx, target: discord.User = None, *, rank_name: str = None):
         if target is None or rank_name is None:
@@ -134,6 +141,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"⚡ **[Admin]** ปรับเปลี่ยนตำแหน่งแรงค์ของ **{name}** เป็น **\"{rank_name}\"** เรียบร้อยแล้วครับ! 🎖️")
     
     # ─── 🏦 7. คำสั่งแอดมิน: เซ็ตเงินในธนาคาร (!set_bank บวกลบตามค่า) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_bank")
     async def set_bank(self, ctx, target: discord.User = None, amount: int = None):
         print(f"🏦 [BANK ADMIN DEBUG] แอดมิน {ctx.author.name} เรียกใช้คำสั่ง !set_bank | target: {target} | amount: {amount}")
@@ -165,6 +173,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"⚡ **[Admin]** ได้ยึด/หักเงินฝากในธนาคารของ **{name}** ออกจำนวน `- {abs(amount):,}` ทอง\n🏦 (เงินฝากปัจจุบัน: `{new_bank:,}` ทอง) 📉💳")
 
     # ─── 🧹 8. คำสั่งแอดมิน: เคลียร์ข้อมูลเฉพาะส่วน (รายบุคคล / ทั้งเซิร์ฟเวอร์) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="reset_player")
     async def reset_player(self, ctx, scope: str = None, target: str = None, confirm: str = None):
         print(f"🧹 [RESET DEBUG] แอดมิน {ctx.author.name} เรียกใช้คำสั่ง !reset_player | scope: {scope}, target: {target}, confirm: {confirm}")
@@ -372,6 +381,7 @@ class AdminCommands(commands.Cog):
         print(f"✅ [RESET INDIVIDUAL SUCCESS] ล้างข้อมูลของ {name} ประเภท {scope} สำเร็จ")
 
     # ─── 🔮 9. คำสั่งเซ็ตสถานะทั่วไป (!set_state) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="set_state")
     async def set_state(self, ctx, target: discord.User = None, state: str = "idle"):
         if target is None:
@@ -384,6 +394,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"🔮 **[Admin]** ได้ปรับสถานะตัวละครของ **{name}** เป็น `{state}` เรียบร้อยแล้วครับ! (แก้อาการตัวค้าง)")
 
     # ─── 🎒 10. คำสั่งล้างกระเป๋าไอเทม (!clear_inventory) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="clear_inventory")
     async def clear_inventory(self, ctx, target: str = None, confirm: str = None):
         if target is None:
@@ -405,6 +416,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"🧹 ล้างไอเทมในกระเป๋าของ ID `{user_id}` จนโล่งเรียบร้อยแล้วครับ!")
 
     # ─── 🪙 11. คำสั่งแจกเงินกิจกรรมทุกคนในฐานข้อมูล (!give_cash_all) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="give_cash_all")
     async def give_cash_all(self, ctx, amount: int = None):
         if amount is None:
@@ -417,6 +429,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"📢 **[ประกาศ]** แจกทองทุกคนคนละ `{amount:,}` ทอง!")
 
     
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="give_bank_all")
     async def give_bank_all(self, ctx, amount: int = None):
         if amount is None:
@@ -429,6 +442,7 @@ class AdminCommands(commands.Cog):
         await ctx.send(f"📢 **[ประกาศจากสมาคม]** ท่านแอดมินได้ทำการแจกทองให้กับนักผจญภัยทุกคนในฐานข้อมูล จำนวน `+ {amount:,}` ทอง! 🪙✨")
 
     # ─── 🚫 12. คำสั่งแอดมิน: สั่งจับกุมแบบกำหนดเวลา / ปลดปล่อยผู้เล่น (!arrest) ───
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="arrest")
     async def arrest(self, ctx, target: discord.User = None, duration_mins: int = None):
         import time
@@ -478,6 +492,7 @@ class AdminCommands(commands.Cog):
     # ==========================================================
     # 🏅 [COMMAND]: !add_role [ยศ] [ผู้เล่น หรือ all] (เวอร์ชันเสถียร 100%)
     # ==========================================================
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="add_role")
     @commands.has_permissions(administrator=True)
     async def add_role_command(self, ctx, role: discord.Role = None, target: str = None):
@@ -532,6 +547,7 @@ class AdminCommands(commands.Cog):
     # ==========================================================
     # ❌ [COMMAND]: !remove_role [ยศ] [ผู้เล่น หรือ all] (เวอร์ชันเสถียร 100%)
     # ==========================================================
+    @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="remove_role")
     @commands.has_permissions(administrator=True)
     async def remove_role_command(self, ctx, role: discord.Role = None, target: str = None):
@@ -583,6 +599,7 @@ class AdminCommands(commands.Cog):
                 await ctx.send(f"⚠️ เกิดข้อผิดพลาด: `{e}`")
 
     # ─── 🔍 13. แอดมินส่องดูสเตตัสโปรไฟล์ผู้เล่น (!check_profile) ───
+    @not_arrested()
     @commands.command(name="check_profile")
     async def check_profile(self, ctx, target: discord.User = None):
         if target is None:

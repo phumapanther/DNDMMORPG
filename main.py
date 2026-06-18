@@ -5,6 +5,7 @@ import sys
 import os
 from dotenv import load_dotenv
 import models.player_model as player_model
+import time
 
 # 🟢 1. โหลดไฟล์ .env เป็นสิ่งแรกสุด เพื่อให้ระบบรู้จัก Token
 load_dotenv()
@@ -23,9 +24,16 @@ def create_bot(bot_type: str):
 
     bot = commands.Bot(command_prefix="!", intents=intents)
     bot.bot_type = bot_type
+    @bot.event
+    async def on_command_error(ctx, error):
+        # ตรวจสอบว่า Error ที่เกิดขึ้นคือ CheckFailure ที่มาจากไฟล์ utils.py หรือไม่
+        if isinstance(error, commands.CheckFailure) and str(error) == "arrested":
+            await ctx.send("❌ **[ปฏิเสธคำสั่ง]** คุณถูกจับกุมอยู่! ไม่สามารถใช้คำสั่งได้จนกว่าจะพ้นโทษ 🔗⛓️")
+        else:
+            # ถ้าเป็น Error อื่นๆ ให้แสดงออกมาตามปกติ (เพื่อใช้ดีบั๊ก)
+            raise error
 
     # 🔗⛓️ [เพิ่มระบบระบบดักกลางอากาศ]: ล็อกสิทธิ์ไม่ให้ผู้เล่นติดสถานะจับกุมพิมพ์คำสั่ง
-    # 🔗⛓️ [ระบบดักกลางอากาศ]: ตรวจสอบสถานะและเวลาคุกออโต้
     @bot.before_invoke
     async def global_before_invoke(ctx):
         import time
@@ -55,6 +63,7 @@ def create_bot(bot_type: str):
 
             await ctx.send(f"❌ **[ปฏิเสธคำสั่ง]** คุณถูกจับกุมอยู่! เหลือเวลาติดคุกอีกประมาณ `{remaining_mins}` นาที 🔗⛓️")
             raise commands.CommandError("Player is currently arrested.")
+        
 
     @bot.event
     async def on_ready():
@@ -113,6 +122,22 @@ def create_bot(bot_type: str):
             await bot.start(token)
 
     return custom_start
+
+def not_arrested():
+    async def predicate(ctx):
+        player = player_model.get_player(ctx.author.id)
+        if player and player.get("current_state") == "arrested":
+            arrest_until = player.get("arrest_until", 0)
+            
+            # เช็กถ้าเวลาหมดแล้ว ให้ปลดคุก
+            if time.time() >= int(arrest_until):
+                player_model.update_player_field(ctx.author.id, "current_state", "idle")
+                return True
+            
+            # ถ้ายังติดคุก
+            raise commands.CheckFailure("arrested")
+        return True
+    return commands.check(predicate)
 
 # 🚀 3. ฟังก์ชันควบคุมการจุดระเบิดเปิดบอ
 async def main():

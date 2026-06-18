@@ -3,25 +3,7 @@ from discord.ext import commands
 import models.player_model as player_model
 from views.profile_embed import create_profile_embed
 from views.profile_embed import GAME_RACES, GAME_CLASSES
-import asyncio
-
-def allowed_channels(channel_names):
-    async def predicate(ctx):
-        if ctx.channel.name not in channel_names:
-            # 1. ส่งข้อความเตือน
-            msg = await ctx.send(f"❌ **ผิดห้อง!** คำสั่งนี้ใช้ได้เฉพาะในห้อง: `{'`, `'.join(channel_names)}` เท่านั้นครับ")
-            
-            # 2. รอ 5 วินาทีแล้วลบทั้งคำสั่งของผู้เล่น และข้อความเตือนของบอททิ้ง
-            try:
-                await asyncio.sleep(5) # รอ 5 วินาที
-                await msg.delete()     # ลบข้อความบอท
-                await ctx.message.delete() # ลบข้อความที่ผู้เล่นพิมพ์
-            except:
-                pass # กันกรณีบอทไม่มีสิทธิ์ลบ
-            
-            return False
-        return True
-    return commands.check(predicate)
+from utils import not_arrested, allowed_channels  # 👈 ใส่บรรทัดนี้ลงไป
 
 class GameCommands(commands.Cog):
     def __init__(self, bot):
