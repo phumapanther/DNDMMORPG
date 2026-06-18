@@ -56,12 +56,23 @@ ARMOR_STATS = {
 WEAPON_STATS = {
     "Wooden_Weapon": {"name": "🪵 อาวุธไม้",     "atk": 10, "dur": 50},
     "Iron_Weapon":   {"name": "⚔️ อาวุธเหล็ก",   "atk": 30, "dur": 150},
-    "Legen_Weapon":  {"name": "🗡️ อาวุธในตำนาน", "atk": 60, "dur": 300}
+    "Legen_Weapon":  {"name": "🗡️ อาวุธในตำนาน", "atk": 999, "dur": 1000}
 }
 
 ITEM_CONFIG = {
-    "1": {"name": "🧪 ยาฮีล", "buy": 500, "sell": 250},
-    "2": {"name": "🛠️ ใบซ่อมแซม", "buy": 800, "sell": 400}
+    # --- ไอเทมกดใช้ (Consumables) ---
+    "1": {"name": "🧪 ยาฮีล", "buy": 500, "sell": 250, "type": "use"},
+    "2": {"name": "🛠️ ใบซ่อมแซม", "buy": 800, "sell": 400, "type": "use"},
+    
+    # --- หมวดชุดเกราะ (Armors) ---
+    "3": {"name": "🟫 เกราะหนังเบา", "buy": 1500, "sell": 750, "type": "armor", "equip_key": "Leather_L"},
+    "4": {"name": "🟫 เกราะหนังหนัก", "buy": 2500, "sell": 1250, "type": "armor", "equip_key": "Leather_H"},
+    "5": {"name": "⬜ เกราะเหล็กเบา", "buy": 5000, "sell": 2500, "type": "armor", "equip_key": "Steel_L"},
+    "6": {"name": "⬜ เกราะเหล็กหนัก", "buy": 10000, "sell": 5000, "type": "armor", "equip_key": "Steel_H"},
+    
+    # --- หมวดอาวุธ (Weapons) ---
+    "7": {"name": "⚔️ อาวุธเหล็ก", "buy": 4500, "sell": 2250, "type": "weapon", "equip_key": "Iron_Weapon"},
+    "8": {"name": "🗡️ อาวุธในตำนาน", "buy": 9999999, "sell": 1, "type": "weapon", "equip_key": "Legen_Weapon"}
 }
 
 def create_profile_embed(target_member, player_data):
