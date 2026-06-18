@@ -162,7 +162,7 @@ class PlayerCommands(commands.Cog):
         for char in ["(", ")", "[", "]", "'", '"', " "]:
             clean_inv = clean_inv.replace(char, "")
             
-        print(f"DEBUG: [Bag] User {user_id} เปิดกระเป๋า | ข้อมูลดิบใน DB: '{raw_inv}' | คลีนแล้ว: '{clean_inv}'")
+        # print(f"DEBUG: [Bag] User {user_id} เปิดกระเป๋า | ข้อมูลดิบใน DB: '{raw_inv}' | คลีนแล้ว: '{clean_inv}'")
 
         inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
 

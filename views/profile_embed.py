@@ -72,7 +72,12 @@ ITEM_CONFIG = {
     
     # --- หมวดอาวุธ (Weapons) ---
     "7": {"name": "⚔️ อาวุธเหล็ก", "buy": 4500, "sell": 2250, "type": "weapon", "equip_key": "Iron_Weapon"},
-    "8": {"name": "🗡️ อาวุธในตำนาน", "buy": 9999999, "sell": 1, "type": "weapon", "equip_key": "Legen_Weapon"}
+    "8": {"name": "🗡️ อาวุธในตำนาน", "buy": 9999999, "sell": 1, "type": "weapon", "equip_key": "Legen_Weapon"},
+
+    # --- หมวดไอเทมขยะ (Junk / Loot) ห้ามซื้อในร้าน ---
+    "9": {"name": "🦴 เศษกระดูก", "buy": 100, "sell": 15, "type": "junk", "purchasable": False},
+    "10": {"name": "🕸️ ใยแมงมุม", "buy": 150, "sell": 25, "type": "junk", "purchasable": False},
+    "11": {"name": "💎 เศษอัญมณีหมองหม่น", "buy": 1000, "sell": 250, "type": "junk", "purchasable": False}
 }
 
 def create_profile_embed(target_member, player_data):

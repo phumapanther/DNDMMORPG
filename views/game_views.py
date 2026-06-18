@@ -460,10 +460,10 @@ class VillageEventView(View):
         # 🛡️ เงื่อนไขพิเศษ: ถ้าความคงทนเป็น 0 ให้โบนัส HP เป็น 0
         if current_dur <= 0:
             effective_hp_bonus = 0
-            print(f"DEBUG: เกราะ {armor_key} พัง (Dur: {current_dur}) -> โบนัส HP: 0")
+            # print(f"DEBUG: เกราะ {armor_key} พัง (Dur: {current_dur}) -> โบนัส HP: 0")
         else:
             effective_hp_bonus = armor_hp_bonus
-            print(f"DEBUG: เกราะ {armor_key} ปกติ (Dur: {current_dur}) -> โบนัส HP: {effective_hp_bonus}")
+            # print(f"DEBUG: เกราะ {armor_key} ปกติ (Dur: {current_dur}) -> โบนัส HP: {effective_hp_bonus}")
         # คำนวณ HP รวม
         max_hp_total = player["max_hp"] + effective_hp_bonus
             
@@ -507,8 +507,9 @@ class ShopEventView(View):
     # --- หน้าหลัก ---
     @discord.ui.button(label="💰 ซื้อไอเทม", style=discord.ButtonStyle.green)
     async def buy_menu(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="เลือกไอเทมที่ต้องการซื้อ:\n" + "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items()]), 
-                                                view=BuySelectView(self.user_id))
+        # 🛠️ กรองแสดงเฉพาะของที่ตั้งค่า purchasable ไม่เท่ากับ False
+        content = "🛒 เลือกไอเทมที่ต้องการซื้อ:\n" + "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items() if v.get("purchasable", True)])
+        await interaction.response.edit_message(content=content, view=BuySelectView(self.user_id))
 
     @discord.ui.button(label="📦 ขายไอเทม", style=discord.ButtonStyle.red)
     async def sell_menu(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -525,13 +526,15 @@ class BuySelectView(View):
         self.user_id = user_id
         
         # [ระบบเช็กไฟล์/แคช]
-        print(f"DEBUG: [ร้านค้า] กำลังโหลดหน้า ซื้อไอเทม ให้ User ID: {user_id}")
+        # print(f"DEBUG: [ร้านค้า] กำลังโหลดหน้า ซื้อไอเทม ให้ User ID: {user_id}")
         
         try:
             for item_id, data in ITEM_CONFIG.items():
-                btn = discord.ui.Button(label=f"เลข {item_id}", custom_id=item_id)
-                btn.callback = self.buy_callback
-                self.add_item(btn)
+                # 🛠️ สร้างปุ่มเฉพาะของที่อนุญาตให้ซื้อ
+                if data.get("purchasable", True):
+                    btn = discord.ui.Button(label=f"เลข {item_id}", custom_id=item_id)
+                    btn.callback = self.buy_callback
+                    self.add_item(btn)
             
             # 🚨 จุดที่แก้ไข: ต้องสร้างปุ่มก่อน แล้วค่อยผูกฟังก์ชัน callback 
             back_btn = discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary)
@@ -568,8 +571,9 @@ class BuySelectView(View):
         player_model.update_player_field(self.user_id, "cash", player["cash"])
         player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
         
+        # 🛠️ รีเฟรชข้อความโดยซ่อนไอเทมขยะ
         content = f"🛒 เลือกไอเทมที่ต้องการซื้อ: (เงินคงเหลือ: {player['cash']} ทอง)\n"
-        content += "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items()])
+        content += "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items() if v.get("purchasable", True)])
         
         # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
         await interaction.edit_original_response(content=content, view=self)
@@ -657,29 +661,67 @@ class TreasureEventView(View):
     @discord.ui.button(label="📦 เปิดกล่องสมบัติ", style=discord.ButtonStyle.success)
     async def open_box(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
+        
         # 🗡️ เช็กว่าผู้เล่นมีโรล Rogue หรือไม่
         is_rogue = any(role.name == "Rogue" for role in interaction.user.roles)
         
-        # ถ้าเป็น Rogue จะไม่โดนกับดัก (is_trap จะเป็น False เสมอ)
+        # 🚨 แก้บั๊กทับซ้อน: คำนวณครั้งเดียว ถ้าเป็น Rogue is_trap จะเป็น False เสมอ
         is_trap = random.random() < 0.25 and not is_rogue
 
-        is_trap = random.random() < 0.25
         if is_trap:
             player_model.update_player_field(self.user_id, "current_state", "idle")
             player_model.update_player_field(self.user_id, "last_event", "treasure_trap")
+            
+            # [ระบบเช็กไฟล์/แคช]
+            # print(f"DEBUG: [Treasure] User {self.user_id} โดนกับดัก Mimic!")
+            
             await interaction.response.edit_message(
                 content="💥 **มันคือหีบกับดักมิมิก (Mimic)!** กลไกกับดักทำงานครอบงำคุณ! (ครั้งหน้าคุณจะเจอกับดักชัวร์ๆ 100%)\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
         else:
-            gold = random.randint(50, 150)
-            player_model.update_player_field(self.user_id, "cash", player["cash"] + gold)
             player_model.update_player_field(self.user_id, "current_state", "idle")
             player_model.update_player_field(self.user_id, "last_event", "treasure")
-            await interaction.response.edit_message(
-                content=f"🎉 โชคดีมาก! ด้านในเป็นหีบสมบัติแท้ คุณได้รับเงินสกุลกลาง `{gold}` ทอง!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
-                view=AdventureView(author_id=self.user_id)
-            )
+            
+            # 🎁 สุ่มประเภทของรางวัล: เงิน (80%) หรือ ไอเทม (20%)
+            # ปรับสัดส่วนตรง weights=[80, 20] ได้ตามความต้องการครับ
+            reward_type = random.choices(["gold", "item"], weights=[80, 20], k=1)[0]
+
+            if reward_type == "gold":
+                gold = random.randint(50, 150)
+                player_model.update_player_field(self.user_id, "cash", player["cash"] + gold)
+                
+                # print(f"DEBUG: [Treasure] User {self.user_id} เปิดได้เงิน {gold} ทอง")
+                
+                await interaction.response.edit_message(
+                    content=f"🎉 โชคดีมาก! ด้านในเป็นหีบสมบัติแท้ คุณได้รับเงินสกุลกลาง `{gold}` ทอง!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
+                    view=AdventureView(author_id=self.user_id)
+                )
+            else:
+                # 📦 กรณีโชคดีได้ไอเทมฟรี (ใช้ตรรกะออกยากตามราคาแบบเดียวกับ Shop)
+                item_ids = list(ITEM_CONFIG.keys())
+                weights = [1.0 / max(ITEM_CONFIG[i]["buy"], 1) for i in item_ids] 
+                
+                chosen_item_id = random.choices(item_ids, weights=weights, k=1)[0]
+                chosen_item = ITEM_CONFIG[chosen_item_id]
+
+                # 🛠️ ทำความสะอาดข้อมูลกระเป๋าก่อนยัดของใหม่
+                raw_inv = player.get("inventory", "")
+                clean_inv = str(raw_inv)
+                for char in ["(", ")", "[", "]", "'", '"', " "]:
+                    clean_inv = clean_inv.replace(char, "")
+                inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+                
+                # นำของเข้ากระเป๋า (ฟรี ไม่หักเงิน)
+                inv_array.append(chosen_item_id)
+                player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
+                
+                # print(f"DEBUG: [Treasure] User {self.user_id} แจ็คพอตแตก! เปิดได้ไอเทม {chosen_item['name']}")
+
+                await interaction.response.edit_message(
+                    content=f"🎉 แจ็คพอต!! หีบใบนี้ไม่ได้มีแค่เงิน แต่มี **{chosen_item['name']}** ซ่อนอยู่!\n✅ คุณเก็บไอเทมล้ำค่าชิ้นนี้เข้ากระเป๋าไปได้ฟรีๆ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
+                    view=AdventureView(author_id=self.user_id)
+                )
 
     @discord.ui.button(label="❌ เมินเฉยและเดินผ่าน", style=discord.ButtonStyle.secondary)
     async def ignore(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -707,6 +749,8 @@ class NpcEventView(View):
     async def talk(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
         outcome = random.choice(["gift", "shop", "nothing"])
+        
+        # อัปเดตสถานะให้พร้อมออกเดินทางต่อ
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "npc")
 
@@ -717,6 +761,49 @@ class NpcEventView(View):
                 content=f"🧓 NPC ถูกชะตาในตัวคุณ! เขาใจดีมอบเศษเงินทุนกลางจำนวน `{gold_gift}` ทองให้ฟรี!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
+            
+        elif outcome == "shop":
+            # 1. คำนวณเรทสุ่มไอเทม (ไอเทมแพง = โอกาสน้อย)
+            item_ids = list(ITEM_CONFIG.keys())
+            # ใช้ 1 / ราคาซื้อ เพื่อสร้างน้ำหนัก ยิ่งราคามาก น้ำหนักยิ่งน้อยมาก
+            weights = [1.0 / max(ITEM_CONFIG[i]["buy"], 1) for i in item_ids] 
+            
+            chosen_item_id = random.choices(item_ids, weights=weights, k=1)[0]
+            chosen_item = ITEM_CONFIG[chosen_item_id]
+            
+            # 2. สุ่มราคาขาย (ตั้งแต่ 0 ทอง จนถึง 2 เท่าของราคาเดิม)
+            original_price = chosen_item["buy"]
+            offered_price = random.randint(0, original_price * 2)
+            
+            # 3. เช็กเงินว่าพอซื้อไหม
+            if player["cash"] >= offered_price:
+                # 🛠️ ทำความสะอาดข้อมูลกระเป๋าก่อนยัดของใหม่
+                raw_inv = player.get("inventory", "")
+                clean_inv = str(raw_inv)
+                for char in ["(", ")", "[", "]", "'", '"', " "]:
+                    clean_inv = clean_inv.replace(char, "")
+                inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+                
+                # นำของเข้ากระเป๋าและหักเงิน
+                inv_array.append(chosen_item_id)
+                new_cash = player["cash"] - offered_price
+                
+                player_model.update_player_field(self.user_id, "cash", new_cash)
+                player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
+                
+                price_text = f"`{offered_price:,}` ทอง" if offered_price > 0 else "**ฟรี!!**"
+                msg = f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา {price_text}!\n✅ **คุณมีเงินพอจึงจ่ายเงินและรับของมาโดยอัตโนมัติ** (เงินเหลือ `{new_cash:,}`)\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?"
+                # print(f"DEBUG: [NPC Shop] สุ่มได้ {chosen_item['name']} ราคา {offered_price} -> ซื้อสำเร็จ")
+            else:
+                # กรณีเงินไม่พอ ข้ามทันที
+                msg = f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา `{offered_price:,}` ทอง!\n❌ **แต่เงินในกระเป๋าของคุณไม่พอ!** (คุณมีแค่ `{player['cash']:,}`) NPC จึงเก็บของแล้วเดินจากไป...\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?"
+                # print(f"DEBUG: [NPC Shop] สุ่มได้ {chosen_item['name']} ราคา {offered_price} -> เงินไม่พอ (ข้าม)")
+
+            await interaction.response.edit_message(
+                content=msg, 
+                view=AdventureView(author_id=self.user_id)
+            )
+            
         else:
             await interaction.response.edit_message(
                 content="💤 NPC แค่บ่นพึมพำเรื่องฟ้าฝนชวนคุยแก้เหงาเฉยๆ ไม่มีอะไรเกิดขึ้น\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
@@ -913,14 +1000,14 @@ class AdventureView(View):
         last_evt = player.get("last_event", "none")
         
         # [ระบบเช็กไฟล์/แคช] ดูสถานะตั้งต้นก่อนเข้าเงื่อนไข
-        # print(f"DEBUG: [ออกเดินทาง] ตัวแปรตั้งต้น -> dg_steps={dg_steps}, last_event={last_evt}")
+        # # print(f"DEBUG: [ออกเดินทาง] ตัวแปรตั้งต้น -> dg_steps={dg_steps}, last_event={last_evt}")
 
         # 2. ตรวจสอบลำดับความสำคัญ (เงื่อนไขบังคับ)
         if dg_steps > 0:
             chosen_event = "monster"
             dg_steps -= 1
             player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
-            # print(f"DEBUG: [ดันเจี้ยน] บังคับเจอ monster (เหลือ {dg_steps} ตา)")
+            # # print(f"DEBUG: [ดันเจี้ยน] บังคับเจอ monster (เหลือ {dg_steps} ตา)")
 
         elif last_evt == "treasure_trap":
             chosen_event = "trap" # 🚨 แก้จาก treasure เป็น trap เพื่อให้โดนกับดักมิมิก
@@ -938,7 +1025,7 @@ class AdventureView(View):
                 current_weights[1] = 0  
 
             chosen_event = random.choices(EVENT_LIST, weights=current_weights, k=1)[0]
-            # print(f"DEBUG: [สุ่มปกติ] ผลลัพธ์การสุ่มได้ -> {chosen_event}")
+            # # print(f"DEBUG: [สุ่มปกติ] ผลลัพธ์การสุ่มได้ -> {chosen_event}")
 
         # 4. อัปเดต last_event เพื่อให้รอบหน้ามีผลต่อเนื่อง
         player_model.update_player_field(user_id, "last_event", chosen_event)
