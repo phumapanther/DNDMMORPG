@@ -972,6 +972,35 @@ class AdventureView(View):
     def __init__(self, author_id: int):
         super().__init__(timeout=60)
         self.author_id = author_id
+        self.message = None # 💡 1. เพิ่มตัวแปรไว้เก็บข้อความเพื่อรอการ Edit
+
+    # ==========================================
+    # ⏰ ดักจับเวลาผู้เล่นไม่กดปุ่ม "เริ่มออกเดินทาง" ใน 1 นาที
+    # ==========================================
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True # ปิดปุ่ม
+            
+        if self.message:
+            try:
+                await self.message.edit(content="⏰ **หน้าต่างนี้หมดอายุแล้ว!** รบกวนพิมพ์คำสั่งผจญภัยเพื่อเรียกหน้าต่างใหม่นะครับ", view=self)
+            except Exception:
+                pass
+
+    # ==========================================
+    # ⚠️ ดักจับเวลาปุ่มพังฉุกเฉิน (Soft-lock safeguard)
+    # ==========================================
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        print(f"🚨 ERROR [AdventureView]: {error}")
+        
+        # ปลดล็อกสถานะใน DB ทันที
+        player_model.update_player_field(self.author_id, "current_state", "idle")
+        err_msg = "⚠️ บอร์ดผจญภัยเกิดข้อผิดพลาด! ระบบได้รีเซ็ตสถานะของคุณให้กลับเป็นปกติแล้วครับ"
+        
+        if not interaction.response.is_done():
+            await interaction.response.send_message(err_msg, ephemeral=True)
+        else:
+            await interaction.followup.send(err_msg, ephemeral=True)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
@@ -998,21 +1027,15 @@ class AdventureView(View):
         # 1. ดึงข้อมูลตัวแปรทั้งหมดมาก่อน (Cache Fetch)
         dg_steps = player.get("dungeon_steps", 0)
         last_evt = player.get("last_event", "none")
-        
-        # [ระบบเช็กไฟล์/แคช] ดูสถานะตั้งต้นก่อนเข้าเงื่อนไข
-        # # print(f"DEBUG: [ออกเดินทาง] ตัวแปรตั้งต้น -> dg_steps={dg_steps}, last_event={last_evt}")
 
         # 2. ตรวจสอบลำดับความสำคัญ (เงื่อนไขบังคับ)
         if dg_steps > 0:
             chosen_event = "monster"
             dg_steps -= 1
             player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
-            # # print(f"DEBUG: [ดันเจี้ยน] บังคับเจอ monster (เหลือ {dg_steps} ตา)")
-
         elif last_evt == "treasure_trap":
-            chosen_event = "trap" # 🚨 แก้จาก treasure เป็น trap เพื่อให้โดนกับดักมิมิก
-            # print("DEBUG: [มิมิก] ล็อกเป้าหมายบังคับเจอ trap!")
-
+            chosen_event = "trap" 
+            
         # 3. ถ้าไม่มีเหตุการณ์บังคับ ให้สุ่มตามปกติ
         else:
             if last_evt not in EVENT_WEIGHTS: 
@@ -1020,41 +1043,62 @@ class AdventureView(View):
 
             current_weights = list(EVENT_WEIGHTS[last_evt])
             
-            # ตัดโอกาสเจอหมู่บ้านถ้าติดคูลดาวน์ (สมมติว่า index 1 คือ village)
+            # ตัดโอกาสเจอหมู่บ้านถ้าติดคูลดาวน์
             if current_cooldown > 0:
                 current_weights[1] = 0  
 
             chosen_event = random.choices(EVENT_LIST, weights=current_weights, k=1)[0]
-            # # print(f"DEBUG: [สุ่มปกติ] ผลลัพธ์การสุ่มได้ -> {chosen_event}")
 
-        # 4. อัปเดต last_event เพื่อให้รอบหน้ามีผลต่อเนื่อง
+        # 4. อัปเดต last_event
         player_model.update_player_field(user_id, "last_event", chosen_event)
-
         
         if chosen_event == "village":
             player_model.update_player_field(user_id, "village_cooldown", 10)
 
+
+        # ==========================================
+        # 🛠️ จุดที่แก้ไข: ท่าส่งข้อความแบบฝัง Timeout ให้เหตุการณ์ถัดไป
+        # ==========================================
         if chosen_event == "monster":
             player_model.update_player_field(user_id, "current_state", "fighting")
             status_msg = f"*(เหลืออีก {dg_steps} ตาในดันเจี้ยน)*" if dg_steps > 0 or player.get("dungeon_steps", 0) > 0 else f"*(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*"
-            await interaction.followup.send(content=f"👹 มีเงาปริศนาพุ่งออกมากระโจนขวางทางคุณ! เลือกแอคชั่นหรือคลาสสกิลของคุณ: {status_msg}", view=MonsterEventView(user_id, interaction.user.roles))
+            
+            # สร้าง View -> ส่งข้อความรอรับค่า -> ยัดข้อความกลับเข้า View
+            next_view = MonsterEventView(user_id, interaction.user.roles)
+            sent_msg = await interaction.followup.send(content=f"👹 มีเงาปริศนาพุ่งออกมากระโจนขวางทางคุณ! เลือกแอคชั่นหรือคลาสสกิลของคุณ: {status_msg}", view=next_view, wait=True)
+            next_view.message = sent_msg
             
         elif chosen_event == "village":
             player_model.update_player_field(user_id, "current_state", "village")
-            await interaction.followup.send(content="🏡 คุณเดินทางมาพบ **'หมู่บ้านอุ่นใจ'** เลือกแอคชั่นของคุณ:", view=VillageEventView(user_id))
+            
+            next_view = VillageEventView(user_id)
+            sent_msg = await interaction.followup.send(content="🏡 คุณเดินทางมาพบ **'หมู่บ้านอุ่นใจ'** เลือกแอคชั่นของคุณ:", view=next_view, wait=True)
+            next_view.message = sent_msg
 
         elif chosen_event == "treasure":
             player_model.update_player_field(user_id, "current_state", "treasure_choice")
-            await interaction.followup.send(content=f"📦 คุณพบ **'หีบสมบัติปริศนาลงอักขระโบราณ'** เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=TreasureEventView(user_id))
+            
+            next_view = TreasureEventView(user_id)
+            sent_msg = await interaction.followup.send(content=f"📦 คุณพบ **'หีบสมบัติปริศนาลงอักขระโบราณ'** เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=next_view, wait=True)
+            next_view.message = sent_msg
 
         elif chosen_event == "npc":
             player_model.update_player_field(user_id, "current_state", "npc_choice")
-            await interaction.followup.send(content=f"🧓 คุณเจอนักเดินทางพเนจร (NPC) นั่งอยู่ข้างกองไฟ เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=NpcEventView(user_id))
+            
+            next_view = NpcEventView(user_id)
+            sent_msg = await interaction.followup.send(content=f"🧓 คุณเจอนักเดินทางพเนจร (NPC) นั่งอยู่ข้างกองไฟ เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=next_view, wait=True)
+            next_view.message = sent_msg
 
         elif chosen_event == "dungeon":
             player_model.update_player_field(user_id, "current_state", "dungeon_choice")
-            await interaction.followup.send(content=f"💀 คุณส่องเห็น **'ช่องอุโมงค์ถ้ำใต้พิภพ (Dungeon)'** เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=DungeonEventView(user_id))
+            
+            next_view = DungeonEventView(user_id)
+            sent_msg = await interaction.followup.send(content=f"💀 คุณส่องเห็น **'ช่องอุโมงค์ถ้ำใต้พิภพ (Dungeon)'** เลือกแอคชั่นของคุณ: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=next_view, wait=True)
+            next_view.message = sent_msg
 
         elif chosen_event == "trap":
             player_model.update_player_field(user_id, "current_state", "trap_defense")
-            await interaction.followup.send(content=f"⚠️ *แก๊ก!* คุณพลาดก้าวขาไปเกี่ยวสายสลิง **'กับดักโบราณ'** เข้าให้แล้ว! เตรียมรับมือแอคชั่นหลบหลีก: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=TrapEventView(user_id, interaction.user.roles))
+            
+            next_view = TrapEventView(user_id, interaction.user.roles)
+            sent_msg = await interaction.followup.send(content=f"⚠️ *แก๊ก!* คุณพลาดก้าวขาไปเกี่ยวสายสลิง **'กับดักโบราณ'** เข้าให้แล้ว! เตรียมรับมือแอคชั่นหลบหลีก: *(คูลดาวน์หมู่บ้านเหลือ: {current_cooldown} ตา)*", view=next_view, wait=True)
+            next_view.message = sent_msg
