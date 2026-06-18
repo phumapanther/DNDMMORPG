@@ -523,57 +523,29 @@ class BuySelectView(View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
         self.user_id = user_id
-        
-        # [ระบบเช็กไฟล์/แคช]
-        print(f"DEBUG: [ร้านค้า] กำลังโหลดหน้า ซื้อไอเทม ให้ User ID: {user_id}")
-        
-        try:
-            for item_id, data in ITEM_CONFIG.items():
-                btn = discord.ui.Button(label=f"เลข {item_id}", custom_id=item_id)
-                btn.callback = self.buy_callback
-                self.add_item(btn)
-            
-            # 🚨 จุดที่แก้ไข: ต้องสร้างปุ่มก่อน แล้วค่อยผูกฟังก์ชัน callback 
-            back_btn = discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary)
-            back_btn.callback = self.back_callback
-            self.add_item(back_btn)
-            
-        except Exception as e:
-            print(f"ERROR: [ร้านค้า] โหลดหน้าซื้อล้มเหลว: {e}")
+        for item_id, data in ITEM_CONFIG.items():
+            btn = discord.ui.Button(label=f"เลข {item_id}", custom_id=item_id)
+            btn.callback = self.buy_callback
+            self.add_item(btn)
+        self.add_item(discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary, callback=self.back_callback))
 
-    # 🛒 แก้ไขระบบซื้อ
     async def buy_callback(self, interaction: discord.Interaction):
-        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม เพื่อกันบอทขึ้น "การโต้ตอบล้มเหลว"
-        await interaction.response.defer()
-
-        item_id = str(interaction.data["custom_id"])
+        item_id = interaction.data["custom_id"]
         player = player_model.get_player(self.user_id)
         price = ITEM_CONFIG[item_id]["buy"]
         
         if player["cash"] < price:
-            # เปลี่ยนมาใช้ followup เพราะเรา defer ไปแล้ว
-            await interaction.followup.send("❌ เงินไม่พอ!", ephemeral=True) 
+            await interaction.response.send_message("❌ เงินไม่พอ!", ephemeral=True)
             return
             
-        raw_inv = player.get("inventory", "")
-        clean_inv = str(raw_inv)
-        for char in ["(", ")", "[", "]", "'", '"', " "]:
-            clean_inv = clean_inv.replace(char, "")
-            
-        inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-        
+        # อัปเดตเงินและ Inventory
+        inv = player.get("inventory", "").split(",") if player.get("inventory") else []
         inv.append(item_id)
-        player["cash"] -= price
         
-        player_model.update_player_field(self.user_id, "cash", player["cash"])
+        player_model.update_player_field(self.user_id, "cash", player["cash"] - price)
         player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
         
-        content = f"🛒 เลือกไอเทมที่ต้องการซื้อ: (เงินคงเหลือ: {player['cash']} ทอง)\n"
-        content += "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items()])
-        
-        # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
-        await interaction.edit_original_response(content=content, view=self)
-        await interaction.followup.send(f"✅ ซื้อ {ITEM_CONFIG[item_id]['name']} เข้ากระเป๋า 1 ชิ้น!", ephemeral=True)
+        await interaction.response.send_message(f"✅ ซื้อ {ITEM_CONFIG[item_id]['name']} แล้ว!", ephemeral=True)
 
     async def back_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(view=ShopEventView(self.user_id))
@@ -581,67 +553,36 @@ class BuySelectView(View):
 # --- ระบบขาย ---
 class SellSelectView(View):
     def __init__(self, user_id):
-        super().__init__(timeout=None)
+        super().__init__(timeout=60)
         self.user_id = user_id
         player = player_model.get_player(user_id)
+        inv = player.get("inventory", "").split(",") if player.get("inventory") else []
+        unique_items = set(inv)
         
-        try:
-            # 🛠️ ระบบกรองทำความสะอาดข้อมูลกระเป๋า
-            raw_inv = player.get("inventory", "")
-            clean_inv = str(raw_inv)
-            for char in ["(", ")", "[", "]", "'", '"', " "]:
-                clean_inv = clean_inv.replace(char, "")
-                
-            inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-            
-            unique_items = set(inv)
-            
-            for item_id in unique_items:
-                if item_id in ITEM_CONFIG:
-                    btn = discord.ui.Button(label=ITEM_CONFIG[item_id]["name"], custom_id=str(item_id))
-                    btn.callback = self.sell_callback
-                    self.add_item(btn)
-                    
-            back_btn = discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary)
-            back_btn.callback = self.back_callback
-            self.add_item(back_btn)
-            
-        except Exception as e:
-            print(f"ERROR: [ร้านค้า] โหลดหน้าขายล้มเหลว: {e}")
+        for item_id in unique_items:
+            if item_id in ITEM_CONFIG:
+                btn = discord.ui.Button(label=ITEM_CONFIG[item_id]["name"], custom_id=item_id)
+                btn.callback = self.sell_callback
+                self.add_item(btn)
+        self.add_item(discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary, callback=self.back_callback))
 
-    # 💰 แก้ไขระบบขาย
     async def sell_callback(self, interaction: discord.Interaction):
-        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม
-        await interaction.response.defer()
-
-        item_id = str(interaction.data["custom_id"])
+        item_id = interaction.data["custom_id"]
         player = player_model.get_player(self.user_id)
-        
-        raw_inv = player.get("inventory", "")
-        clean_inv = str(raw_inv)
-        for char in ["(", ")", "[", "]", "'", '"', " "]:
-            clean_inv = clean_inv.replace(char, "")
-            
-        inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+        inv = player.get("inventory", "").split(",") if player.get("inventory") else []
         
         if item_id in inv:
             inv.remove(item_id)
-            player["cash"] += ITEM_CONFIG[item_id]["sell"]
-            
-            player_model.update_player_field(self.user_id, "cash", player["cash"])
+            player_model.update_player_field(self.user_id, "cash", player["cash"] + ITEM_CONFIG[item_id]["sell"])
             player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
-            
-            content = f"📦 เลือกไอเทมที่จะขาย: (เงินคงเหลือ: {player['cash']} ทอง)"
-            # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
-            await interaction.edit_original_response(content=content, view=SellSelectView(self.user_id))
-            
-            await interaction.followup.send(f"✅ ขาย {ITEM_CONFIG[item_id]['name']} แล้ว! ได้เงินมา {ITEM_CONFIG[item_id]['sell']} ทอง", ephemeral=True)
+            await interaction.response.send_message(f"✅ ขาย {ITEM_CONFIG[item_id]['name']} แล้ว!", ephemeral=True)
         else:
-            await interaction.followup.send("❌ คุณไม่มีไอเทมชิ้นนี้ให้ขายแล้ว!", ephemeral=True)
+            await interaction.response.send_message("❌ ไม่มีไอเทมนี้!", ephemeral=True)
             
     async def back_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(view=ShopEventView(self.user_id))
-        
+
+
 # 3. เหตุการณ์ กล่องสมบัติ (Treasure)
 class TreasureEventView(View):
     def __init__(self, user_id):
@@ -790,11 +731,13 @@ class TrapEventView(View):
             return
 
         is_rogue = any(role.name == "Rogue" for role in self.member_roles)
+        
         # อัปเดตสถานะพื้นฐาน
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "trap")
+        
         if is_rogue:
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 content="💨 **พรสวรรค์คลาส Rogue ทำงาน!** คุณกระโดดม้วนตัวหลบกลไกกับดักพ้นได้อย่างงดงาม 100%!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
@@ -908,42 +851,25 @@ class AdventureView(View):
             current_cooldown -= 1
             player_model.update_player_field(user_id, "village_cooldown", current_cooldown)
 
-        # 1. ดึงข้อมูลตัวแปรทั้งหมดมาก่อน (Cache Fetch)
         dg_steps = player.get("dungeon_steps", 0)
-        last_evt = player.get("last_event", "none")
-        
-        # [ระบบเช็กไฟล์/แคช] ดูสถานะตั้งต้นก่อนเข้าเงื่อนไข
-        # print(f"DEBUG: [ออกเดินทาง] ตัวแปรตั้งต้น -> dg_steps={dg_steps}, last_event={last_evt}")
 
-        # 2. ตรวจสอบลำดับความสำคัญ (เงื่อนไขบังคับ)
         if dg_steps > 0:
             chosen_event = "monster"
             dg_steps -= 1
             player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
-            # print(f"DEBUG: [ดันเจี้ยน] บังคับเจอ monster (เหลือ {dg_steps} ตา)")
-
-        elif last_evt == "treasure_trap":
-            chosen_event = "trap" # 🚨 แก้จาก treasure เป็น trap เพื่อให้โดนกับดักมิมิก
-            # print("DEBUG: [มิมิก] ล็อกเป้าหมายบังคับเจอ trap!")
-
-        # 3. ถ้าไม่มีเหตุการณ์บังคับ ให้สุ่มตามปกติ
         else:
-            if last_evt not in EVENT_WEIGHTS: 
-                last_evt = "none"
+            last_evt = player.get("last_event", "none")
+            if last_evt not in EVENT_WEIGHTS: last_evt = "none"
 
             current_weights = list(EVENT_WEIGHTS[last_evt])
-            
-            # ตัดโอกาสเจอหมู่บ้านถ้าติดคูลดาวน์ (สมมติว่า index 1 คือ village)
             if current_cooldown > 0:
                 current_weights[1] = 0  
 
             chosen_event = random.choices(EVENT_LIST, weights=current_weights, k=1)[0]
-            # print(f"DEBUG: [สุ่มปกติ] ผลลัพธ์การสุ่มได้ -> {chosen_event}")
 
-        # 4. อัปเดต last_event เพื่อให้รอบหน้ามีผลต่อเนื่อง
-        player_model.update_player_field(user_id, "last_event", chosen_event)
+            if last_evt =="treasure_trap":
+                chosen_event == "trap"
 
-        
         if chosen_event == "village":
             player_model.update_player_field(user_id, "village_cooldown", 10)
 

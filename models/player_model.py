@@ -13,10 +13,15 @@ NEW_PLAYER_DEFAULTS = {
     "rank": "F",
     "hp": 100,
     "max_hp": 100,
-    "cash": 20000,          # 🪙 ปรับเงินเริ่มต้นตรงนี้ได้เลยครับคุณอาเธอร์!
+    "cash": 20000,
     "bank": 0,
-    "inventory": "[]",     # เก็บเป็นโครงสร้างข้อความ JSON
+    "inventory": "[]",
+    # 🛡️ ระบบไอเทมสวมใส่
     "armor": "None",
+    "armor_dur": 100,      # ตามค่า None ใน ARMOR_STATS
+    "weapon": "Wooden_Weapon",
+    "weapon_dur": 50,      # ตามค่า Wooden_Weapon ใน WEAPON_STATS
+    # สถานะอื่นๆ
     "current_state": "idle",
     "last_event": "none",
     "last_death": None,
@@ -24,9 +29,7 @@ NEW_PLAYER_DEFAULTS = {
     "dungeon_steps": 0,
     "total_online_time": 0,
     "arrest_until": 0
-    # ➕ อนาคตอยากเพิ่มฟิลด์อะไรใหม่ (เช่น "mana": 100) สามารถพิมพ์เติมต่อท้ายตรงนี้ได้เลย!
 }
-
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -82,15 +85,26 @@ def get_player(user_id):
         conn.commit()
         conn.close()
         
-        # สร้างก้อนคืนค่าให้บอทในรอบแรก โดยแปลง inventory กลับเป็นลิสต์ธรรมดา
         init_profile = NEW_PLAYER_DEFAULTS.copy()
-        init_profile["inventory"] = json.loads(init_profile["inventory"])
+        
+        # 🛠️ จุดที่ 1: ยกเลิกการใช้ json.loads สำหรับผู้เล่นใหม่
+        raw_inv = str(init_profile.get("inventory", ""))
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            raw_inv = raw_inv.replace(char, "")
+        init_profile["inventory"] = raw_inv
+        
         return init_profile
     
     conn.close()
     
     p_dict = dict(row)
-    p_dict["inventory"] = json.loads(p_dict["inventory"])
+    
+    # 🛠️ จุดที่ 2: ยกเลิกการใช้ json.loads สำหรับผู้เล่นเก่า (แก้บั๊กที่ทำบอทดับ)
+    raw_inv = str(p_dict.get("inventory", ""))
+    for char in ["(", ")", "[", "]", "'", '"', " "]:
+        raw_inv = raw_inv.replace(char, "")
+    p_dict["inventory"] = raw_inv
+    
     return p_dict
 
 # ─── 💾 โซนฟังก์ชันจัดการสเตตัสความปลอดภัย ───

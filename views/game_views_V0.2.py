@@ -2,7 +2,7 @@ import discord
 from discord.ui import View
 import random
 import models.player_model as player_model
-from views.profile_embed import ARMOR_STATS, GAME_CLASSES ,WEAPON_STATS,ITEM_CONFIG
+from views.profile_embed import ARMOR_STATS, GAME_CLASSES
 
 # ==========================================================
 # 📊 [SKILL BALANCE CONFIG] คลังศูนย์กลางคุมบาลานซ์สกิลแบบละเอียด 100%
@@ -131,25 +131,12 @@ class MonsterEventView(View):
         player = player_model.get_player(self.user_id)
         p_lvl = player.get("level", 1)
         
-        # 1. 🛡️ ดึงข้อมูลอุปกรณ์
-        w_id = player.get("weapon", "Wooden_Weapon")
-        a_id = player.get("armor", "None")
-        w_stat = WEAPON_STATS.get(w_id, WEAPON_STATS["Wooden_Weapon"])
-        a_stat = ARMOR_STATS.get(a_id, ARMOR_STATS["None"])
-        
-        # 2. 🛡️ คำนวณพลังโจมตี (ถ้าความทนทานเป็น 0 พลังโจมตีหาย)
-        curr_atk = w_stat["atk"] if player.get("weapon_dur", 0) > 0 else 0
-        
-        # 3. 🛠️ กำหนดค่าความทนทานเริ่มต้นเป็น 0 เพื่อป้องกันบั๊ก
-        durability_lost_w = 3 if skill_used else 1 
-        damage_to_armor = 0 
-        
         player_roll = random.randint(1, 20)
         monster_roll = sum(random.randint(1, 20) for _ in range(self.m_stats["dice_count"]))
         
         skill_log = ""
         combat_log = ""
-        db_updates = {}
+        db_updates = {} 
         
         enrage_bonus = 0
         if self.turn_count > 3:
@@ -220,22 +207,13 @@ class MonsterEventView(View):
 
         # ⚔ คุณทอยได้เต๋าชนะบอส
         if player_roll >= monster_roll:
-            damage_to_monster = int((player_roll + curr_atk) * 5 * damage_multiplier)
+            damage_to_monster = player_roll * 5 * damage_multiplier
             self.monster_hp = max(0, self.monster_hp - damage_to_monster)
-            combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}** (+{curr_atk} ดาบ) สร้างความเสียหายใส่บอส `- {damage_to_monster}` หน่วย\n"
+            combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}** โจมตีสร้างความเสียหายใส่บอส `- {damage_to_monster}` หน่วย\n"
         
-        # 👾 บอสทอยได้เต๋าชนะ
+        # 👾 บอสทอยได้เต๋าชนะ (คิดดาเมจสวนกลับ)
         else:
             damage_to_player = random.randint(10, 25) + enrage_bonus
-            
-            # 5. 🛡️ [จุดที่ต้องเพิ่ม] เกราะลดตามความแรงของมอนสเตอร์ (หาร 10)
-            # คำนวณความเสียหายเกราะ (ถ้ามีเกราะและยังไม่พัง)
-            if player.get("armor_dur", 0) > 0:
-                damage_to_armor = max(1, int(damage_to_player / 10))
-                # เกราะช่วยลดดาเมจ (ตัวเลือกเสริม: ลดดาเมจให้ผู้เล่น 20%)
-                reduction = int(damage_to_player * 0.2)
-                damage_to_player -= reduction
-                combat_log += f"🛡️ เกราะรับดาเมจแทนคุณ `- {reduction}` หน่วย!\n"
             
             # ❄ สเตตัส Frostbolt
             if self.active_buffs.get("frostbolt", 0) > 0:
@@ -262,21 +240,7 @@ class MonsterEventView(View):
 
             if damage_to_player > 0:
                 player["hp"] = max(0, player["hp"] - damage_to_player)
-                combat_log += f"💥 บอสโจมตีสวน! เสีย HP `- {damage_to_player}` (เกราะเสื่อมสภาพ `- {damage_to_armor}`)\n"
-
-       # 6. 💾 คำนวณค่าทนทานใหม่ (ถ้าไม่มีการโจมตีสวน ค่า damage_to_armor ก็จะเป็น 0)
-        new_w_dur = max(0, player.get("weapon_dur", 0) - durability_lost_w)
-        new_a_dur = max(0, player.get("armor_dur", 0) - damage_to_armor)
-
-        db_updates["weapon_dur"] = new_w_dur
-        db_updates["armor_dur"] = new_a_dur
-        db_updates["hp"] = player["hp"]
-
-        # 7. 🚨 แจ้งเตือนของพัง
-        if new_w_dur == 0 and player.get("weapon_dur", 0) > 0:
-            combat_log += "🚨 **อาวุธของคุณพังแตกหัก!**\n"
-        if new_a_dur == 0 and player.get("armor_dur", 0) > 0:
-            combat_log += "🚨 **ชุดเกราะของคุณพังยับเยิน!**\n"
+                combat_log += f"💥 บอสทอยได้ **🎲 {monster_roll}** สวนกลับกระแทกใส่คุณเสีย HP `- {damage_to_player}` หน่วย\n"
 
         # หักเทิร์นสถานะบัฟ
         if self.active_buffs.get("frostbolt", 0) > 0: self.active_buffs["frostbolt"] -= 1
@@ -385,49 +349,24 @@ class MonsterEventView(View):
     @discord.ui.button(label="🏃 วิ่งหนี!", style=discord.ButtonStyle.secondary, row=0)
     async def flee(self, interaction: discord.Interaction, button: discord.ui.Button):
         flee_roll = random.randint(1, 100)
+        player_model.update_player_field(self.user_id, "current_state", "idle")
         
-        # ถ้าหนีสำเร็จ
         if flee_roll <= self.m_stats["flee_chance"]:
-            player_model.update_player_field(self.user_id, "current_state", "idle")
             await interaction.response.edit_message(content=f"💨 **หนีสำเร็จ!** สลัดหลุดจากมอนสเตอร์สำเร็จ!", view=AdventureView(author_id=self.user_id))
-        
-        # ถ้าหนีไม่สำเร็จ (โดนโจมตีสวน)
         else:
+            player_model.update_player_field(self.user_id, "current_state", "fighting")
             player = player_model.get_player(self.user_id)
             damage = random.randint(15, 30)
             new_hp = max(0, player["hp"] - damage)
-            
-            # 🛡️ คำนวณความเสียหายของเกราะ (โดนตี = เกราะลด)
-            if player.get("armor_dur", 0) > 0:
-                damage_to_armor = max(1, int(damage / 10))
-                new_armor_dur = max(0, player.get("armor_dur", 0) - damage_to_armor)
-            else:
-                # ถ้าเกราะพังอยู่แล้ว ก็ไม่ต้องลด และไม่ต้องแสดงค่าความเสื่อมสภาพ
-                damage_to_armor = 0
-                new_armor_dur = 0
-            
-            # อัปเดตข้อมูลทั้งหมดในรอบเดียว
-            db_updates = {
-                "hp": new_hp,
-                "armor_dur": new_armor_dur,
-                "current_state": "fighting"
-            }
+            player_model.update_player_field(self.user_id, "hp", new_hp)
             
             if new_hp <= 0:
-                db_updates["current_state"] = "dead"
-                player_model.update_player_fields(self.user_id, db_updates)
+                player_model.update_player_field(self.user_id, "current_state", "dead")
                 await interaction.response.edit_message(content="💥 หนีไม่พ้นและโดนตบตายคาที่!", view=RespawnView(self.user_id))
             else:
-                player_model.update_player_fields(self.user_id, db_updates)
                 next_turn = self.turn_count + 1
-                msg = f"💥 หนีไม่พ้น! โดนสวนหลังฟาดกระอักเลือด `- {damage}`! (เกราะเสียหาย `- {damage_to_armor}`)"
-                
-                # เพิ่มข้อความแจ้งเตือนถ้าเกราะพัง
-                if new_armor_dur == 0 and player.get("armor_dur", 0) > 0:
-                    msg += "\n🚨 **ชุดเกราะของคุณพังยับเยิน!**"
-                    
-                await interaction.response.edit_message(content=msg, view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn))
-
+                await interaction.response.edit_message(content=f"💥 หนีไม่พ้น! โดนสวนหลังฟาดกระอักเลือด `- {damage}`!", view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn))
+    
     async def skill_callback(self, interaction: discord.Interaction):
         if not await self.interaction_check(interaction): return
         await self.process_turn(interaction, skill_used=interaction.data["custom_id"])
@@ -450,39 +389,15 @@ class VillageEventView(View):
         if player["cash"] < 2500:
             await interaction.response.send_message("❌ เงินสดกลางไม่พอจ่ายค่าห้องนอน!", ephemeral=True)
             return
-        
-        # ดึงข้อมูลจากฐานข้อมูล
-        armor_key = player.get("armor", "None")
-        current_dur = player.get("armor_dur", 0) # ดึงค่าความคงทนมาเช็กด้วย
-        # ดึงข้อมูล Config เกราะ
-        armor_info = ARMOR_STATS.get(armor_key, ARMOR_STATS["None"])
-        armor_hp_bonus = armor_info.get("hp", 0)
-        # 🛡️ เงื่อนไขพิเศษ: ถ้าความคงทนเป็น 0 ให้โบนัส HP เป็น 0
-        if current_dur <= 0:
-            effective_hp_bonus = 0
-            print(f"DEBUG: เกราะ {armor_key} พัง (Dur: {current_dur}) -> โบนัส HP: 0")
-        else:
-            effective_hp_bonus = armor_hp_bonus
-            print(f"DEBUG: เกราะ {armor_key} ปกติ (Dur: {current_dur}) -> โบนัส HP: {effective_hp_bonus}")
-        # คำนวณ HP รวม
-        max_hp_total = player["max_hp"] + effective_hp_bonus
             
         player_model.update_player_field(self.user_id, "cash", player["cash"] - 2500)
-        player_model.update_player_field(self.user_id, "hp", max_hp_total)
+        player_model.update_player_field(self.user_id, "hp", player["max_hp"])
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "village")
         
         await interaction.response.edit_message(
             content="💤 คุณนอนพักผ่อนอย่างเต็มอิ่ม ฟื้นฟู HP จนเต็ม!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
             view=AdventureView(author_id=self.user_id)
-        )
-
-    @discord.ui.button(label="🏪 ร้านค้าประจำ", style=discord.ButtonStyle.primary)
-    async def shop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # เปลี่ยนหน้าจาก Village ไปยัง Shop
-        await interaction.response.edit_message(
-            content="🏪 ยินดีต้อนรับสู่ร้านค้าประจำหมู่บ้าน! คุณต้องการซื้อหรือขายไอเทมอะไรดี?",
-            view=ShopEventView(self.user_id) # เรียกใช้ View ร้านค้าที่ผมร่างให้ก่อนหน้านี้
         )
 
     @discord.ui.button(label="🚶 ออกเดินทางต่อ", style=discord.ButtonStyle.secondary)
@@ -495,153 +410,7 @@ class VillageEventView(View):
             view=AdventureView(author_id=self.user_id)
         )
 
-# ระบบร้านค้า      
-class ShopEventView(View):
-    def __init__(self, user_id):
-        super().__init__(timeout=60)
-        self.user_id = user_id
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == self.user_id
-
-    # --- หน้าหลัก ---
-    @discord.ui.button(label="💰 ซื้อไอเทม", style=discord.ButtonStyle.green)
-    async def buy_menu(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="เลือกไอเทมที่ต้องการซื้อ:\n" + "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items()]), 
-                                                view=BuySelectView(self.user_id))
-
-    @discord.ui.button(label="📦 ขายไอเทม", style=discord.ButtonStyle.red)
-    async def sell_menu(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="เลือกไอเทมที่จะขาย:", view=SellSelectView(self.user_id))
-
-    @discord.ui.button(label="⬅️ กลับไปหมู่บ้าน", style=discord.ButtonStyle.secondary)
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="คุณเดินกลับไปยังจุดพักแรม...", view=VillageEventView(self.user_id))
-
-# --- ระบบซื้อ ---
-class BuySelectView(View):
-    def __init__(self, user_id):
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        
-        # [ระบบเช็กไฟล์/แคช]
-        print(f"DEBUG: [ร้านค้า] กำลังโหลดหน้า ซื้อไอเทม ให้ User ID: {user_id}")
-        
-        try:
-            for item_id, data in ITEM_CONFIG.items():
-                btn = discord.ui.Button(label=f"เลข {item_id}", custom_id=item_id)
-                btn.callback = self.buy_callback
-                self.add_item(btn)
-            
-            # 🚨 จุดที่แก้ไข: ต้องสร้างปุ่มก่อน แล้วค่อยผูกฟังก์ชัน callback 
-            back_btn = discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary)
-            back_btn.callback = self.back_callback
-            self.add_item(back_btn)
-            
-        except Exception as e:
-            print(f"ERROR: [ร้านค้า] โหลดหน้าซื้อล้มเหลว: {e}")
-
-    # 🛒 แก้ไขระบบซื้อ
-    async def buy_callback(self, interaction: discord.Interaction):
-        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม เพื่อกันบอทขึ้น "การโต้ตอบล้มเหลว"
-        await interaction.response.defer()
-
-        item_id = str(interaction.data["custom_id"])
-        player = player_model.get_player(self.user_id)
-        price = ITEM_CONFIG[item_id]["buy"]
-        
-        if player["cash"] < price:
-            # เปลี่ยนมาใช้ followup เพราะเรา defer ไปแล้ว
-            await interaction.followup.send("❌ เงินไม่พอ!", ephemeral=True) 
-            return
-            
-        raw_inv = player.get("inventory", "")
-        clean_inv = str(raw_inv)
-        for char in ["(", ")", "[", "]", "'", '"', " "]:
-            clean_inv = clean_inv.replace(char, "")
-            
-        inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-        
-        inv.append(item_id)
-        player["cash"] -= price
-        
-        player_model.update_player_field(self.user_id, "cash", player["cash"])
-        player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
-        
-        content = f"🛒 เลือกไอเทมที่ต้องการซื้อ: (เงินคงเหลือ: {player['cash']} ทอง)\n"
-        content += "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items()])
-        
-        # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
-        await interaction.edit_original_response(content=content, view=self)
-        await interaction.followup.send(f"✅ ซื้อ {ITEM_CONFIG[item_id]['name']} เข้ากระเป๋า 1 ชิ้น!", ephemeral=True)
-
-    async def back_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(view=ShopEventView(self.user_id))
-
-# --- ระบบขาย ---
-class SellSelectView(View):
-    def __init__(self, user_id):
-        super().__init__(timeout=None)
-        self.user_id = user_id
-        player = player_model.get_player(user_id)
-        
-        try:
-            # 🛠️ ระบบกรองทำความสะอาดข้อมูลกระเป๋า
-            raw_inv = player.get("inventory", "")
-            clean_inv = str(raw_inv)
-            for char in ["(", ")", "[", "]", "'", '"', " "]:
-                clean_inv = clean_inv.replace(char, "")
-                
-            inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-            
-            unique_items = set(inv)
-            
-            for item_id in unique_items:
-                if item_id in ITEM_CONFIG:
-                    btn = discord.ui.Button(label=ITEM_CONFIG[item_id]["name"], custom_id=str(item_id))
-                    btn.callback = self.sell_callback
-                    self.add_item(btn)
-                    
-            back_btn = discord.ui.Button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary)
-            back_btn.callback = self.back_callback
-            self.add_item(back_btn)
-            
-        except Exception as e:
-            print(f"ERROR: [ร้านค้า] โหลดหน้าขายล้มเหลว: {e}")
-
-    # 💰 แก้ไขระบบขาย
-    async def sell_callback(self, interaction: discord.Interaction):
-        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม
-        await interaction.response.defer()
-
-        item_id = str(interaction.data["custom_id"])
-        player = player_model.get_player(self.user_id)
-        
-        raw_inv = player.get("inventory", "")
-        clean_inv = str(raw_inv)
-        for char in ["(", ")", "[", "]", "'", '"', " "]:
-            clean_inv = clean_inv.replace(char, "")
-            
-        inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-        
-        if item_id in inv:
-            inv.remove(item_id)
-            player["cash"] += ITEM_CONFIG[item_id]["sell"]
-            
-            player_model.update_player_field(self.user_id, "cash", player["cash"])
-            player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
-            
-            content = f"📦 เลือกไอเทมที่จะขาย: (เงินคงเหลือ: {player['cash']} ทอง)"
-            # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
-            await interaction.edit_original_response(content=content, view=SellSelectView(self.user_id))
-            
-            await interaction.followup.send(f"✅ ขาย {ITEM_CONFIG[item_id]['name']} แล้ว! ได้เงินมา {ITEM_CONFIG[item_id]['sell']} ทอง", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ คุณไม่มีไอเทมชิ้นนี้ให้ขายแล้ว!", ephemeral=True)
-            
-    async def back_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(view=ShopEventView(self.user_id))
-        
 # 3. เหตุการณ์ กล่องสมบัติ (Treasure)
 class TreasureEventView(View):
     def __init__(self, user_id):
@@ -666,7 +435,7 @@ class TreasureEventView(View):
         is_trap = random.random() < 0.25
         if is_trap:
             player_model.update_player_field(self.user_id, "current_state", "idle")
-            player_model.update_player_field(self.user_id, "last_event", "treasure_trap")
+            player_model.update_player_field(self.user_id, "last_event", "trap")
             await interaction.response.edit_message(
                 content="💥 **มันคือหีบกับดักมิมิก (Mimic)!** กลไกกับดักทำงานครอบงำคุณ! (ครั้งหน้าคุณจะเจอกับดักชัวร์ๆ 100%)\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
@@ -780,67 +549,35 @@ class TrapEventView(View):
 
     @discord.ui.button(label="🎲 ทอยเต๋าหลบกับดัก", style=discord.ButtonStyle.primary)
     async def dodge(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 1. แจ้ง Discord ว่าบอทได้รับคำสั่งแล้วทันที (กัน Interaction ล้มเหลว)
-        await interaction.response.defer()
-
         player = player_model.get_player(self.user_id)
-        # ป้องกันกรณี player ไม่มีข้อมูล (เช่น พิมพ์ !play แล้วไม่อยู่ใน DB)
-        if not player:
-            await interaction.followup.send("❌ ไม่พบข้อมูลตัวละครของคุณ!", ephemeral=True)
-            return
-
         is_rogue = any(role.name == "Rogue" for role in self.member_roles)
-        # อัปเดตสถานะพื้นฐาน
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "trap")
+        
         if is_rogue:
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 content="💨 **พรสวรรค์คลาส Rogue ทำงาน!** คุณกระโดดม้วนตัวหลบกลไกกับดักพ้นได้อย่างงดงาม 100%!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
             return
 
-        # แก้บรรทัดเดิมของคุณอาเธอร์เป็นชุดนี้ครับ:
         armor_key = player.get("armor", "None")
-        armor_data = ARMOR_STATS.get(armor_key)
-        
-        # ถ้าหาเกราะไม่เจอ ให้ใช้ "None" เป็นค่าเริ่มต้น
-        if not armor_data:
-            armor_data = ARMOR_STATS["None"]
-
-        armor_evasion = armor_data.get("eva", 0) 
-        
+        armor_evasion = ARMOR_STATS.get(armor_key, ARMOR_STATS["None"])["evasion"]
         roll_chance = random.randint(1, 100)
-        
+
         if roll_chance <= armor_evasion:
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 content=f"🎉 รอดหวุดหวิด! (เต๋าสุ่ม {roll_chance} vs อัตราเกราะ {armor_evasion}%) คุณก้าวขาหลบใบมีดกับดักพ้นสำเร็จ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
             )
         else:
             damage = random.randint(15, 35)
             new_hp = max(0, player["hp"] - damage)
-            
-            # คำนวณความเสื่อมสภาพเกราะ
-            current_armor_dur = player.get("armor_dur", 0)
-            if current_armor_dur > 0:
-                damage_to_armor = max(1, int(damage / 10))
-                new_armor_dur = max(0, current_armor_dur - damage_to_armor)
-            else:
-                damage_to_armor = 0
-                new_armor_dur = 0
-            
-            # 💾 อัปเดตข้อมูลแยกบรรทัด เพื่อความปลอดภัย (ใช้ update_player_field แบบเดิม)
             player_model.update_player_field(self.user_id, "hp", new_hp)
-            player_model.update_player_field(self.user_id, "armor_dur", new_armor_dur)
-            
-            # 🚨 เช็กว่าเกราะพังหรือไม่
-            # armor_alert = "\n🚨 **ชุดเกราะของคุณพังยับเยินจากกับดัก!**" if (new_armor_dur == 0 and current_armor_dur > 0) else ""
-
-            await interaction.edit_original_response(
+            await interaction.response.edit_message(
                 content=f"💥 พลาดท่ากระแทกกับดัก! โดนหนามแทงเสีย HP `- {damage}` หน่วย! (เลือดคงเหลือ: {new_hp})\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                 view=AdventureView(author_id=self.user_id)
-        )
+            )
 
 
 # 🏥 VIEW พิเศษ: ฟื้นคืนชีพเมื่อผู้เล่นหมดสติ (Respawn System)
@@ -908,42 +645,22 @@ class AdventureView(View):
             current_cooldown -= 1
             player_model.update_player_field(user_id, "village_cooldown", current_cooldown)
 
-        # 1. ดึงข้อมูลตัวแปรทั้งหมดมาก่อน (Cache Fetch)
         dg_steps = player.get("dungeon_steps", 0)
-        last_evt = player.get("last_event", "none")
-        
-        # [ระบบเช็กไฟล์/แคช] ดูสถานะตั้งต้นก่อนเข้าเงื่อนไข
-        # print(f"DEBUG: [ออกเดินทาง] ตัวแปรตั้งต้น -> dg_steps={dg_steps}, last_event={last_evt}")
 
-        # 2. ตรวจสอบลำดับความสำคัญ (เงื่อนไขบังคับ)
         if dg_steps > 0:
             chosen_event = "monster"
             dg_steps -= 1
             player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
-            # print(f"DEBUG: [ดันเจี้ยน] บังคับเจอ monster (เหลือ {dg_steps} ตา)")
-
-        elif last_evt == "treasure_trap":
-            chosen_event = "trap" # 🚨 แก้จาก treasure เป็น trap เพื่อให้โดนกับดักมิมิก
-            # print("DEBUG: [มิมิก] ล็อกเป้าหมายบังคับเจอ trap!")
-
-        # 3. ถ้าไม่มีเหตุการณ์บังคับ ให้สุ่มตามปกติ
         else:
-            if last_evt not in EVENT_WEIGHTS: 
-                last_evt = "none"
+            last_evt = player.get("last_event", "none")
+            if last_evt not in EVENT_WEIGHTS: last_evt = "none"
 
             current_weights = list(EVENT_WEIGHTS[last_evt])
-            
-            # ตัดโอกาสเจอหมู่บ้านถ้าติดคูลดาวน์ (สมมติว่า index 1 คือ village)
             if current_cooldown > 0:
                 current_weights[1] = 0  
 
             chosen_event = random.choices(EVENT_LIST, weights=current_weights, k=1)[0]
-            # print(f"DEBUG: [สุ่มปกติ] ผลลัพธ์การสุ่มได้ -> {chosen_event}")
 
-        # 4. อัปเดต last_event เพื่อให้รอบหน้ามีผลต่อเนื่อง
-        player_model.update_player_field(user_id, "last_event", chosen_event)
-
-        
         if chosen_event == "village":
             player_model.update_player_field(user_id, "village_cooldown", 10)
 
