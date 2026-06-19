@@ -52,12 +52,27 @@ class VoiceChatTracker(commands.Cog):
                     # 📈 คำนวณแจก EXP ตามระดับเลเวล
                     base_exp = 100 
                     p_lvl = player["level"] 
-                    
+
+                    # 1. เช็กยศจาก member object
+                    roles = [role.name for role in member.roles]
+
+                    # 2. ตั้งค่าตัวคูณพื้นฐานตามเลเวล
                     multiplier = 1
                     if p_lvl >= 80: multiplier = 5
                     elif p_lvl >= 40: multiplier = 4
                     elif p_lvl >= 20: multiplier = 3
                     elif p_lvl >= 10: multiplier = 2
+
+                    # 3. เพิ่มโบนัสให้นักกวี (ได้รับ EXP เพิ่ม x4 จากโบนัสห้องเสียง)
+                    # ถ้าเป็นนักกวี ให้คูณเพิ่มอีก 4 เท่าจากค่าเดิมที่คำนวณได้
+                    if "ทีมงาน" in roles:
+                        multiplier = multiplier * 2
+                        print(f"🛠️ [Voice Reward] คุณ {member.name} (ทีมงาน) ได้รับโบนัส EXP ห้องเสียง x2!")
+
+                    # 3. เพิ่มโบนัสให้นักกวี (คูณ 4)
+                    if "꒰ EN ꒱ นักกวี 𝄞⋆" in roles:
+                        multiplier = multiplier * 4
+                        print(f"✨ [Voice Reward] คุณ {member.name} (นักกวี) ได้รับโบนัส EXP ห้องเสียง x4!")
                         
                     final_gained_exp = base_exp * multiplier
                     is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
@@ -141,32 +156,34 @@ class VoiceChatTracker(commands.Cog):
             return
             
         user_id = message.author.id
-        
-        # 🟢 1. โหลดข้อมูลผู้เล่นมาไว้ก่อนเลย เพื่อทำการนับแต้มการพิมพ์
         player = player_model.get_player(user_id)
         if not player:
             return
-            
-        # 🟢 2. 📈 เก็บนับจำนวนข้อความลงฐานข้อมูล (ทำทันทีที่พิมพ์ ไม่สน Cooldown)
+
+        # 1. จัดการยศเพื่อคำนวณโบนัส
+        roles = [role.name for role in message.author.roles]
+        
+        # 📈 เก็บสถิติ (ทีมงานได้ event_text * 2)
+        event_bonus = 2 if "ทีมงาน" in roles else 1
         current_total = player.get("total_text", 0)
         current_event = player.get("event_text", 0)
+        
         player_model.update_player_field(user_id, "total_text", current_total + 1)
-        player_model.update_player_field(user_id, "event_text", current_event + 1)
+        player_model.update_player_field(user_id, "event_text", current_event + event_bonus)
 
         current_time = time.time()
         
-        # ⏱️ 3. ตรวจสอบระบบ Cooldown แชท (10 วินาที) สำหรับการแจกเงิน
+        # ⏱️ ระบบ Cooldown 10 วิ
         if user_id in self.chat_cooldowns:
-            last_msg_time = self.chat_cooldowns[user_id]
-            if current_time - last_msg_time < 10: 
-                return # ถ้ายังไม่ครบ 10 วิ ให้ออกไปเลย ไม่ได้เงิน
+            if current_time - self.chat_cooldowns[user_id] < 10: 
+                return
                 
-        # 💰 4. ถ้าผ่าน Cooldown 10 วิมาได้ ค่อยแจกเงิน
-        gained_gold = random.randint(10, 300)
+        # 💰 คำนวณเงิน (ผู้ส่งสารได้เงิน * 4)
+        gold_multi = 4 if "꒰ PR ꒱ ผู้ส่งสาร" in roles else 1
+        gained_gold = random.randint(10, 300) * gold_multi
         new_cash = player.get("cash", 0) + gained_gold
-        
-        # บันทึกข้อมูลทองเข้าฐานข้อมูล
         player_model.update_player_field(user_id, "cash", new_cash)
+
         self.chat_cooldowns[user_id] = current_time
         
         # 📊 [SYSTEM LOG] พ่นแชทรูมแจกตังค์ลงบนหน้าจอ Terminal
