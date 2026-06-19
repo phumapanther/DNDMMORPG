@@ -520,6 +520,53 @@ class VillageEventView(View):
             content="🚶 คุณก้าวเท้าเดินออกจากหมู่บ้านมุ่งสู่เส้นทางหลัก...\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
             view=AdventureView(author_id=self.user_id)
         )
+class DeathRespawnView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=120) # ให้เวลาตัดสินใจ 2 นาที
+        self.user_id = user_id
+        self.message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ วิญญาณดวงนี้ไม่ใช่ของคุณ!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🏥 กลับไปเกิดที่หมู่บ้าน (-1000 ทอง)", style=discord.ButtonStyle.danger)
+    async def force_respawn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        player = player_model.get_player(self.user_id)
+        
+        # หักเงิน 1,000 ทองตามเงื่อนไข (และคำนวณเลือดพื้นฐาน 30% ให้เหมือนระบบปกติ)
+        new_cash = player.get("cash", 0) - 1000
+        respawn_hp = int(player.get("max_hp", 100) * 0.3)
+        
+        # อัปเดตข้อมูลกลับเข้า Database
+        player_model.update_player_field(self.user_id, "hp", respawn_hp)
+        player_model.update_player_field(self.user_id, "cash", new_cash)
+        player_model.update_player_field(self.user_id, "current_state", "village")
+        player_model.update_player_field(self.user_id, "last_event", "village") # 👈 เพิ่มบรรทัดนี้เพื่อรีเซ็ตความจำ
+        player_model.update_player_field(self.user_id, "dungeon_steps", 0)
+        
+        cash_text = f"`{new_cash:,}` ทอง" if new_cash >= 0 else f"`{new_cash:,}` ทอง ⚠️ (ติดหนี้สมาคม!)"
+            
+        # 1. แจ้งเตือนผู้เล่นแบบส่วนตัว (Ephemeral) ว่าชุบชีวิตสำเร็จแล้ว
+        await interaction.response.send_message(
+            content=f"✨ **ฟื้นคืนชีพสำเร็จ!** วิญญาณของคุณถูกดึงกลับมาที่หมู่บ้านอุ่นใจ\n"
+                    f"💸 หักค่าธรรมเนียมชุบชีวิตฉุกเฉิน `-1,000` ทอง (เงินคงเหลือ: {cash_text})",
+            ephemeral=True
+        )
+        
+        # 2. ลบข้อความแจ้งเตือนที่มีปุ่มนี้ทิ้งไปจากหน้าแชทหลัก
+        await interaction.message.delete()
+        
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(content="👻 วิญญาณของคุณยังคงล่องลอยอยู่... (หน้าต่างเกิดใหม่หมดอายุ)", view=self)
+            except:
+                pass
 
 # ระบบร้านค้า      
 class ShopEventView(View):

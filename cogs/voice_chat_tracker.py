@@ -141,25 +141,36 @@ class VoiceChatTracker(commands.Cog):
             return
             
         user_id = message.author.id
+        
+        # 🟢 1. โหลดข้อมูลผู้เล่นมาไว้ก่อนเลย เพื่อทำการนับแต้มการพิมพ์
+        player = player_model.get_player(user_id)
+        if not player:
+            return
+            
+        # 🟢 2. 📈 เก็บนับจำนวนข้อความลงฐานข้อมูล (ทำทันทีที่พิมพ์ ไม่สน Cooldown)
+        current_total = player.get("total_text", 0)
+        current_event = player.get("event_text", 0)
+        player_model.update_player_field(user_id, "total_text", current_total + 1)
+        player_model.update_player_field(user_id, "event_text", current_event + 1)
+
         current_time = time.time()
         
-        # ⏱️ ตรวจสอบระบบ Cooldown แชท (10 วินาที)
+        # ⏱️ 3. ตรวจสอบระบบ Cooldown แชท (10 วินาที) สำหรับการแจกเงิน
         if user_id in self.chat_cooldowns:
             last_msg_time = self.chat_cooldowns[user_id]
             if current_time - last_msg_time < 10: 
-                return
+                return # ถ้ายังไม่ครบ 10 วิ ให้ออกไปเลย ไม่ได้เงิน
                 
-        player = player_model.get_player(user_id)
-        if player:
-            gained_gold = random.randint(10, 300)
-            new_cash = player.get("cash", 0) + gained_gold
-            
-            # บันทึกข้อมูลทองเข้าฐานข้อมูล
-            player_model.update_player_field(user_id, "cash", new_cash)
-            self.chat_cooldowns[user_id] = current_time
-            
-            # 📊 [SYSTEM LOG] พ่นแชทรูมแจกตังค์ลงบนหน้าจอ Terminal
-            print(f"💰 [Chat Reward] คุณ {message.author.name} พิมพ์แชทในช่อง #{message.channel.name} -> ได้รับ: +{gained_gold} ทอง (ทองรวมปัจจุบัน: {new_cash})")
+        # 💰 4. ถ้าผ่าน Cooldown 10 วิมาได้ ค่อยแจกเงิน
+        gained_gold = random.randint(10, 300)
+        new_cash = player.get("cash", 0) + gained_gold
+        
+        # บันทึกข้อมูลทองเข้าฐานข้อมูล
+        player_model.update_player_field(user_id, "cash", new_cash)
+        self.chat_cooldowns[user_id] = current_time
+        
+        # 📊 [SYSTEM LOG] พ่นแชทรูมแจกตังค์ลงบนหน้าจอ Terminal
+        print(f"💰 [Chat Reward] คุณ {message.author.name} พิมพ์แชทในช่อง #{message.channel.name} -> ได้รับ: +{gained_gold} ทอง (ทองรวมปัจจุบัน: {new_cash})")
 
 # ฟังก์ชันสำหรับติดตั้ง Cog เข้าสู่ระบบบอท
 async def setup(bot):

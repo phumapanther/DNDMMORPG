@@ -8,6 +8,7 @@ import sqlite3
 from contextlib import contextmanager
 from utils import not_arrested, allowed_channels
 from views.profile_embed import ARMOR_STATS, GAME_CLASSES, WEAPON_STATS, ITEM_CONFIG
+from views.game_views import DeathRespawnView
 
 class PlayerCommands(commands.Cog):
     def __init__(self, bot):
@@ -79,6 +80,7 @@ class PlayerCommands(commands.Cog):
     # 3. ขอเงิน (Beg)
     @not_arrested() 
     @commands.command(name="beg")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def beg(self, ctx):
         if not any(role.name == "ขอทาน" for role in ctx.author.roles):
             return await ctx.send("❌ เฉพาะคนมียศ 'ขอทาน' เท่านั้นที่จะขอเงินคนอื่นได้!")
@@ -96,6 +98,7 @@ class PlayerCommands(commands.Cog):
     # 4. ปล้น (Rob)
     @not_arrested() 
     @commands.command(name="rob")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def rob(self, ctx, member: discord.Member):
         if member.id == ctx.author.id:
             return await ctx.send("❌ จะปล้นตัวเองทำไมล่ะ!")
@@ -121,6 +124,7 @@ class PlayerCommands(commands.Cog):
 
     # 5. rich
     @commands.command(name="rich")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def rich(self, ctx):
         with self.get_db() as cursor:
             cursor.execute("SELECT user_id, (bank + cash) as total FROM players ORDER BY total DESC LIMIT 10")
@@ -134,6 +138,7 @@ class PlayerCommands(commands.Cog):
 
     # 6. toplvl
     @commands.command(name="toplvl")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def toplvl(self, ctx):
         with self.get_db() as cursor:
             cursor.execute("SELECT user_id, level, exp FROM players ORDER BY level DESC, exp DESC LIMIT 10")
@@ -144,6 +149,73 @@ class PlayerCommands(commands.Cog):
             name = await self.get_user_name(uid)
             msg += f"{i}. **{name}**: เลเวล `{lvl}` (EXP: `{exp}`)\n"
         await ctx.send(msg)
+    
+    # ==========================================
+    # 💬 คำสั่งเช็กสถิติการพิมพ์ของตัวเอง (!mytext)
+    # ==========================================
+    @commands.command(name="mytext")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
+    async def check_my_text(self, ctx):
+        player = player_model.get_player(ctx.author.id)
+        if not player:
+            return await ctx.send("❌ ไม่พบข้อมูลตัวละครของคุณในระบบ!")
+        
+        total_text = player.get("total_text", 0)
+        event_text = player.get("event_text", 0)
+        
+        embed = discord.Embed(
+            title="📊 สถิติการพิมพ์แชทของคุณ", 
+            color=discord.Color.blue()
+        )
+        
+        # ใส่รูปโปรไฟล์ของผู้เล่น
+        if ctx.author.avatar:
+            embed.set_thumbnail(url=ctx.author.avatar.url)
+            
+        embed.add_field(name="💬 ข้อความทั้งหมด (ตลอดชีพ)", value=f"`{total_text:,}` ข้อความ", inline=False)
+        embed.add_field(name="🏆 ข้อความกิจกรรม (ซีซั่นนี้)", value=f"`{event_text:,}` ข้อความ", inline=False)
+        
+        await ctx.send(embed=embed)
+
+
+    # ==========================================
+    # 🏆 คำสั่งเช็ก 10 อันดับคนพิมพ์เยอะที่สุด (!toptext)
+    # ==========================================
+    @commands.command(name="toptext")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
+    async def top_text_leaderboard(self, ctx):
+        # เรียกใช้ฟังก์ชันดึง Top 10 ที่เราเพิ่งสร้าง
+        top_players = player_model.get_top_text_players(10)
+        
+        if not top_players:
+            return await ctx.send("❌ ยังไม่มีสถิติการพิมพ์ในเซิร์ฟเวอร์เลย! (ไปพิมพ์แชทกันก่อนนะ)")
+            
+        embed = discord.Embed(
+            title="🏆 TOP 10 นักแชทแห่งเซิร์ฟเวอร์ 🏆", 
+            description="รายชื่อนักผจญภัยที่พูดคุยเยอะที่สุดในดินแดนนี้!", 
+            color=discord.Color.gold()
+        )
+        
+        board_text = ""
+        for index, (user_id, total, event) in enumerate(top_players, start=1):
+            # จัดการเหรียญรางวัลให้อันดับ 1-3
+            if index == 1:
+                medal = "🥇"
+            elif index == 2:
+                medal = "🥈"
+            elif index == 3:
+                medal = "🥉"
+            else:
+                medal = f"**{index}.**"
+            
+            # ใช้ <@user_id> เพื่อให้ Discord แท็ก (Mention) โชว์ชื่อผู้เล่นปัจจุบันอัตโนมัติ
+            board_text += f"{medal} <@{user_id}>\n"
+            board_text += f"└ 💬 รวม: `{total:,}` | 🏆 กิจกรรม: `{event:,}`\n\n"
+            
+        embed.add_field(name="อันดับกระดานผู้นำ", value=board_text, inline=False)
+        embed.set_footer(text="ระบบจะนับเฉพาะข้อความที่พิมพ์ในช่องแชททั่วไปเท่านั้น")
+        
+        await ctx.send(embed=embed)
     
     # --- โค้ดคำสั่ง !bag ---
     @commands.command(name="bag")
@@ -194,7 +266,6 @@ class PlayerCommands(commands.Cog):
 
         await ctx.send(embed=embed)
         
-    # --- คำสั่ง !use <เลขไอเทม> ---
     # --- คำสั่ง !use <เลขไอเทม> ---
     @commands.command(name="use")
     async def use_item(self, ctx, item_id: str):
@@ -315,6 +386,128 @@ class PlayerCommands(commands.Cog):
         player_model.update_player_field(user_id, "inventory", ",".join(inv_array))
         
         await ctx.send(msg)
+
+    # ==========================================
+    # ⚔️ คำสั่ง PVP (!att @ผู้ใช้)
+    # ==========================================
+    @allowed_channels(["⚒-แชทลานประลอง-⚒"]) # 🛠️ ใช้ Decorator บล็อกห้อง
+    @not_arrested() # 🛠️ บล็อกคนติดคุก
+    @commands.command(name="att")
+    async def pvp_attack(self, ctx, member: discord.Member):
+        if member.id == ctx.author.id:
+            return await ctx.send("❌ คุณไม่สามารถเปิดฉากโจมตีตัวเองได้!")
+
+        # โหลดข้อมูลผู้เล่นทั้งสองฝ่าย
+        attacker = player_model.get_player(ctx.author.id)
+        defender = player_model.get_player(member.id)
+
+        if not attacker or not defender:
+            return await ctx.send("❌ ไม่พบข้อมูลตัวละครของฝ่ายใดฝ่ายหนึ่งในฐานข้อมูล!")
+
+        # 1. เช็กสถานะห้ามต่อสู้ (village หรือ death)
+        if attacker.get("current_state") in ["village", "death"] or defender.get("current_state") in ["village", "death"]:
+            return await ctx.send("❌ ไม่สามารถต่อสู้ได้เนื่องจากมีฝ่ายใดฝ่ายหนึ่งอยู่ในเซฟโซนหมู่บ้าน หรืออยู่ในสถานะเสียชีวิตแล้ว!")
+
+        # 2. เช็กเงื่อนไขเลเวลต่ำกว่า 20
+        if attacker.get("level", 0) < 20 or defender.get("level", 0) < 20:
+            return await ctx.send("❌ ระบบ PVP รองรับเฉพาะผู้กล้าเลเวล 20 ขึ้นไปเท่านั้น! (และห้ามรังแกผู้เล่นเลเวลต่ำกว่า 20)")
+
+        # 3. คำนวณความห่างของเลเวลเพื่อเพิ่มความยากในการทอย
+        lv_diff = attacker.get("level", 0) - defender.get("level", 0)
+        
+        # แต้มเต๋าพื้นฐาน 1-20 บวกรวมแต้มโบนัสตามระดับเลเวล
+        atk_bonus = lv_diff if lv_diff > 0 else 0
+        def_bonus = abs(lv_diff) if lv_diff < 0 else 0
+
+        atk_roll = random.randint(1, 20) + atk_bonus
+        def_roll = random.randint(1, 20) + def_bonus
+
+        # หาผู้ชนะจากการทอยเต๋า
+        if atk_roll == def_roll:
+            return await ctx.send(f"⚔️ **{ctx.author.display_name}** บุกโจมตี **{member.display_name}** แต่แต้มเต๋าเสมอกันที่ `{atk_roll}` แต้ม! ทั้งคู่ตั้งรับและปัดป้องอาวุธไว้ได้!")
+
+        if atk_roll > def_roll:
+            winner, loser = attacker, defender
+            w_member, l_member = ctx.author, member
+            base_dmg = atk_roll
+        else:
+            winner, loser = defender, attacker
+            w_member, l_member = member, ctx.author
+            base_dmg = def_roll
+
+        # 4. คำนวณพลังโจมตีอาวุธผู้ชนะ และ พลังป้องกันเกราะผู้แพ้
+        w_weapon = winner.get("weapon", "None")
+        w_atk_bonus = WEAPON_STATS.get(w_weapon, {}).get("atk", 0)
+
+        l_armor = loser.get("armor", "None")
+        # ใช้ 20% ของ HP เกราะมาเป็นพลังป้องกันหักลบดาเมจ
+        l_def_bonus = int(ARMOR_STATS.get(l_armor, {}).get("hp", 0) * 0.2)
+
+        # สรุปความเสียหายรวม (ขั้นต่ำ 1 ดาเมจ)
+        final_damage = max(1, base_dmg + w_atk_bonus - l_def_bonus)
+        
+        # หักลบพลังชีวิตผู้แพ้
+        loser_current_hp = loser.get("hp", 100)
+        loser_new_hp = max(0, loser_current_hp - final_damage)
+        
+        player_model.update_player_field(l_member.id, "hp", loser_new_hp)
+
+        # 5. เช็กผลการตาย (HP เหลือ 0)
+        death_status_text = ""
+        if loser_new_hp <= 0:
+            player_model.update_player_field(l_member.id, "current_state", "death")
+            death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
+
+        # ส่งข้อความสรุปผลการประลอง 1 เทิร์น
+        embed = discord.Embed(
+            title="⚔️ ผลการดวลศัสตราวุธ ลานประลอง ⚔️",
+            description=f"**{w_member.display_name}** ทอยได้ `{base_dmg}` แต้ม ชนะการประลองในตานี้!\n"
+                        f"💥 สร้างความเสียหายใส่ **{l_member.display_name}** จำนวน `💥 {final_damage}` หน่วย\n"
+                        f"🩸 พลังชีวิตของ {l_member.display_name}: `{loser_current_hp}` ➔ `{loser_new_hp}`{death_status_text}",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+
+    # ==========================================
+    # 👻 ระบบดักจับวิญญาณ (ห้ามคนตายพิมพ์แชทช่องอื่น)
+    # ==========================================
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        # 1. ข้ามข้อความที่บอทพิมพ์เอง เพื่อป้องกันบอทคุยกันเองจนลูป
+        if message.author.bot:
+            return
+
+        # 2. ดึงข้อมูลผู้เล่น
+        player = player_model.get_player(message.author.id)
+        if not player:
+            return
+
+        # 3. เช็กสถานะ ถ้าตายอยู่จะเข้าเงื่อนไขนี้
+        if player.get("current_state") == "death":
+            # อนุญาตให้พิมพ์ในช่องแชทโลกได้ปกติ
+            if message.channel.name == "⌒🌍chat╯แชทโลก":
+                return
+            
+            # ถ้าเป็นช่องอื่น จะทำการลบข้อความทิ้งทันที
+            try:
+                await message.delete()
+            except discord.Forbidden:
+                pass # กันเหนียวเผื่อบอทไม่มีสิทธิ์ลบข้อความในช่องนั้น
+                
+            # 4. เช็กว่าเคยส่งข้อความแจ้งเตือนปุ่มเกิดใหม่ไปหรือยัง?
+            if player.get("last_event") != "death_warned":
+                # ถ้ายังไม่เคยเตือน ให้ส่งปุ่มแจ้งเตือนไป
+                view = DeathRespawnView(message.author.id)
+                warning_msg = await message.channel.send(
+                    f"👻 {message.author.mention} **คุณเสียชีวิตอยู่!** วิญญาณไม่สามารถสื่อสารในช่องทางนี้ได้ (อนุญาตแค่ช่อง `⌒🌍chat╯แชทโลก`)\n"
+                    f"ต้องการจ่ายเงิน `1,000` ทอง เพื่อกลับไปเกิดใหม่ที่หมู่บ้านหรือไม่?",
+                    view=view
+                )
+                view.message = warning_msg
+                
+                # อัปเดตฐานข้อมูลว่า "เตือนแล้วนะ" รอบหน้าจะได้ไม่ส่งอีก
+                player_model.update_player_field(message.author.id, "last_event", "death_warned")
+        
 
 # 🚨 ลบอันที่ซ้ำออกเหลือแค่อันเดียว
 async def setup(bot):

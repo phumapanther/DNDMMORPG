@@ -22,7 +22,7 @@ NEW_PLAYER_DEFAULTS = {
     "weapon": "Wooden_Weapon",
     "weapon_dur": 50,      # ตามค่า Wooden_Weapon ใน WEAPON_STATS
     # สถานะอื่นๆ
-    "current_state": "idle",
+    "current_state": "village",
     "last_event": "none",
     "last_death": None,
     "village_cooldown": 0,
@@ -45,7 +45,7 @@ def init_db():
             bank INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             armor TEXT DEFAULT 'None',
-            current_state TEXT DEFAULT 'idle',
+            current_state TEXT DEFAULT 'village',
             last_event TEXT DEFAULT 'none',
             last_death TEXT,
             village_cooldown INTEGER DEFAULT 0,
@@ -223,6 +223,25 @@ def auto_update_schema():
                 
     conn.commit()
     conn.close()
+
+# นำไปวางล่างสุดของไฟล์ฐานข้อมูล (player_model.py)
+def get_top_text_players(limit=10):
+    """ดึงข้อมูลผู้เล่นที่พิมพ์เยอะที่สุด 10 อันดับแรก (ไม่นับคนที่ยังไม่เคยพิมพ์)"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # ดึงข้อมูลและเรียงลำดับจาก total_text มากไปน้อย จำกัดจำนวนตาม limit
+    cursor.execute("""
+        SELECT user_id, total_text, event_text 
+        FROM players 
+        WHERE total_text > 0 
+        ORDER BY total_text DESC 
+        LIMIT ?
+    """, (limit,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 def execute_custom_game_logic(user_id, action_type, **kwargs):
     """

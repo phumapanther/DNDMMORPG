@@ -50,3 +50,13 @@ def allowed_channels(channel_names):
             return False
         return True
     return commands.check(predicate)
+
+def has_role_or_owner(role_name: str):
+    async def predicate(ctx):
+        is_owner = ctx.author.id == ctx.guild.owner_id
+        has_role = any(role.name == role_name for role in ctx.author.roles)
+        if not (is_owner or has_role):
+            await ctx.send(f"❌ คำสั่งนี้ใช้ได้เฉพาะ ยศ `{role_name}` หรือ เจ้าของเซิร์ฟเวอร์เท่านั้น!")
+            return False
+        return True
+    return commands.check(predicate)
