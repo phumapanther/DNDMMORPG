@@ -90,10 +90,36 @@ class MonsterEventView(View):
         self.turn_count = turn_count
         
         if monster_rank is None:
+            # 1. ดึงข้อมูลผู้เล่นเพื่อเช็กเลเวลปัจจุบัน
+            # (ถ้าในคลาสใช้ชื่อตัวแปรอื่น เช่น self.user_id ให้เปลี่ยนตามความเหมาะสมครับ)
+            player = player_model.get_player(user_id) 
+            player_level = player.get("level", 0)
+            
             rank_keys = list(MONSTER_RANKS.keys())
-            self.monster_rank = random.choices(rank_keys, weights=[60, 23, 10, 5, 2], k=1)[0]
+            
+            # 2. 🛠️ กำหนดน้ำหนักการสุ่ม (Weights) ตามช่วงเลเวล
+            if player_level >= 100:
+                spawn_weights = [10, 30, 20, 25, 15]
+            elif player_level >= 90:
+                spawn_weights = [30, 20, 20, 20, 10]
+            elif player_level >= 50:
+                spawn_weights = [50, 20, 20, 8, 2]
+            elif player_level >= 20:
+                spawn_weights = [70, 15, 5, 3, 2]
+            elif player_level >= 10:
+                spawn_weights = [90, 7, 1, 1, 1]
+            else:
+                # กรณีเลเวล 0 ถึง 9 (เจอมอนสเตอร์ระดับต่ำสุด 100%)
+                spawn_weights = [100, 0, 0, 0, 0] 
+                
+            # 3. สุ่มมอนสเตอร์ตามน้ำหนักที่ได้จากเงื่อนไขด้านบน
+            self.monster_rank = random.choices(rank_keys, weights=spawn_weights, k=1)[0]
             self.m_stats = MONSTER_RANKS[self.monster_rank]
             self.monster_hp = random.randint(self.m_stats["hp_range"][0], self.m_stats["hp_range"][1])
+            
+            # [ระบบเช็กไฟล์/แคช]
+            # print(f"DEBUG: [มอนสเตอร์] เลเวล {player_level} -> ใช้เรท {spawn_weights} -> สุ่มได้ {self.monster_rank}")
+            
         else:
             self.monster_rank = monster_rank
             self.m_stats = MONSTER_RANKS[self.monster_rank]
@@ -444,10 +470,10 @@ class VillageEventView(View):
             return False
         return True
 
-    @discord.ui.button(label="🛏️ พักแรม (2500 ทอง)", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🛏️ พักแรม (2000 ทอง)", style=discord.ButtonStyle.primary)
     async def rest(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
-        if player["cash"] < 2500:
+        if player["cash"] < 2000:
             await interaction.response.send_message("❌ เงินสดกลางไม่พอจ่ายค่าห้องนอน!", ephemeral=True)
             return
         
@@ -467,7 +493,7 @@ class VillageEventView(View):
         # คำนวณ HP รวม
         max_hp_total = player["max_hp"] + effective_hp_bonus
             
-        player_model.update_player_field(self.user_id, "cash", player["cash"] - 2500)
+        player_model.update_player_field(self.user_id, "cash", player["cash"] - 2000)
         player_model.update_player_field(self.user_id, "hp", max_hp_total)
         player_model.update_player_field(self.user_id, "current_state", "idle")
         player_model.update_player_field(self.user_id, "last_event", "village")
@@ -945,8 +971,22 @@ class RespawnView(View):
     @discord.ui.button(label="🏥 ฟื้นตัวและกลับหมู่บ้าน", style=discord.ButtonStyle.green)
     async def respawn(self, interaction: discord.Interaction, button: discord.ui.Button):
         player = player_model.get_player(self.user_id)
+        player_level = player.get("level", 0)
         respawn_hp = int(player["max_hp"] * 0.3)
-        penalty_fee = 2500
+        # 🛠️ คำนวณค่าธรรมเนียมชุบชีวิตตามเลเวล
+        if player_level >= 100:
+            penalty_fee = 10000  # เลเวล 100+ จ่ายหนักสุด
+        elif player_level >= 90:
+            penalty_fee = 5000   # เลเวล 90-99
+        elif player_level >= 50:
+            penalty_fee = 2500   # เลเวล 50-89
+        elif player_level >= 20:
+            penalty_fee = 1000    # เลเวล 20-49
+        elif player_level >= 10:
+            penalty_fee = 500    # เลเวล 10-19
+        else:
+            penalty_fee = 0      # เลเวล 0-9 ชุบฟรี! (ช่วยเหลือผู้เล่นใหม่)
+
         new_cash = player.get("cash", 0) - penalty_fee
         
         player_model.update_player_field(self.user_id, "hp", respawn_hp)

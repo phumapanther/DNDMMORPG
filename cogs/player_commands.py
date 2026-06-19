@@ -181,10 +181,11 @@ class PlayerCommands(commands.Cog):
             for item_id, count in item_counts.items():
                 if item_id in ITEM_CONFIG:
                     item_name = ITEM_CONFIG[item_id]["name"]
-                    bag_list_text += f"{item_name} x`{count}` ชิ้น\n"
+                    # 🛠️ เพิ่ม [เลข ID] ไว้ด้านหน้าให้ผู้เล่นรู้ว่าต้องพิมพ์ !use เลขอะไร
+                    bag_list_text += f"**[{item_id}]** {item_name} x`{count}` ชิ้น\n"
                 else:
                     print(f"WARNING: [Bag] พบ Item ID '{item_id}' ในกระเป๋าผู้เล่น แต่ไม่มีใน ITEM_CONFIG!")
-                    bag_list_text += f"❓ ไอเทมปริศนา (ID: {item_id}) x`{count}` ชิ้น\n"
+                    bag_list_text += f"**[{item_id}]** ❓ ไอเทมปริศนา x`{count}` ชิ้น\n"
 
             embed.add_field(name="📦 ไอเทมในกระเป๋า", value=bag_list_text, inline=False)
 
