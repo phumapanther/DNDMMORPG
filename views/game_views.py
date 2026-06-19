@@ -105,12 +105,12 @@ class MonsterEventView(View):
             elif player_level >= 50:
                 spawn_weights = [50, 20, 20, 8, 2]
             elif player_level >= 20:
-                spawn_weights = [70, 15, 5, 3, 2]
+                spawn_weights = [70, 20, 5, 3, 2]
             elif player_level >= 10:
-                spawn_weights = [90, 7, 1, 1, 1]
+                spawn_weights = [80, 10, 5, 3, 2]
             else:
                 # กรณีเลเวล 0 ถึง 9 (เจอมอนสเตอร์ระดับต่ำสุด 100%)
-                spawn_weights = [100, 0, 0, 0, 0] 
+                spawn_weights = [90, 5, 2, 2, 1] 
                 
             # 3. สุ่มมอนสเตอร์ตามน้ำหนักที่ได้จากเงื่อนไขด้านบน
             self.monster_rank = random.choices(rank_keys, weights=spawn_weights, k=1)[0]
