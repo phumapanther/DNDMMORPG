@@ -71,9 +71,9 @@ class VoiceChatTracker(commands.Cog):
 
                     # 3. เพิ่มโบนัสให้นักกวี (คูณ 4)
                     if "꒰ EN ꒱ นักกวี 𝄞⋆" in roles:
-                        multiplier = multiplier * 4
+                        multiplier = multiplier * 3
                         print(f"✨ [Voice Reward] คุณ {member.name} (นักกวี) ได้รับโบนัส EXP ห้องเสียง x4!")
-                        
+
                     final_gained_exp = base_exp * multiplier
                     is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
                     
@@ -178,8 +178,8 @@ class VoiceChatTracker(commands.Cog):
             if current_time - self.chat_cooldowns[user_id] < 10: 
                 return
                 
-        # 💰 คำนวณเงิน (ผู้ส่งสารได้เงิน * 4)
-        gold_multi = 4 if "꒰ PR ꒱ ผู้ส่งสาร" in roles else 1
+        # 💰 คำนวณเงิน (ผู้ส่งสารได้เงิน * 3)
+        gold_multi = 3 if "꒰ PR ꒱ ผู้ส่งสาร" in roles else 1
         gained_gold = random.randint(10, 300) * gold_multi
         new_cash = player.get("cash", 0) + gained_gold
         player_model.update_player_field(user_id, "cash", new_cash)

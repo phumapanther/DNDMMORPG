@@ -265,6 +265,45 @@ class PlayerCommands(commands.Cog):
         embed.set_thumbnail(url=ctx.author.display_avatar.url)
 
         await ctx.send(embed=embed)
+    
+    # ⏱️ เช็กเวลาออนไลน์ของตัวเอง
+    @commands.command(name="mytime")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
+    async def check_my_time(self, ctx):
+        player = player_model.get_player(ctx.author.id)
+        if not player:
+            return await ctx.send("❌ คุณยังไม่มีข้อมูลในระบบ!")
+        
+        total_minutes = player.get("total_online_time", 0)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        
+        await ctx.send(f"👤 **{ctx.author.name}**\n⏱️ เวลาออนไลน์ทั้งหมดของคุณ: **{hours} ชั่วโมง {minutes} นาที**")
+
+    # 🏆 เช็กอันดับ Top 10 เวลาออนไลน์
+    @commands.command(name="toptime")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
+    async def top_online_time(self, ctx):
+        all_players = player_model.get_all_players() 
+        
+        if not all_players:
+            return await ctx.send("❌ ยังไม่มีข้อมูลผู้เล่นในระบบ!")
+
+        # เรียงลำดับจากมากไปน้อย
+        top_players = sorted(all_players, key=lambda x: x.get("total_online_time", 0), reverse=True)[:10]
+        
+        embed = discord.Embed(title="🏆 10 อันดับนักผจญภัยที่ออนไลน์นานที่สุด", color=discord.Color.gold())
+        
+        msg = ""
+        for i, p in enumerate(top_players, 1):
+            user_id = p.get("user_id")
+            time_m = p.get("total_online_time", 0)
+            
+            # ใช้ <@user_id> เพื่อแท็กชื่อผู้เล่นอัตโนมัติ
+            msg += f"{i}. <@{user_id}> - `{time_m // 60} ชม. {time_m % 60} นาที`\n"
+            
+        embed.description = msg
+        await ctx.send(embed=embed)
         
     # --- คำสั่ง !use <เลขไอเทม> ---
     @commands.command(name="use")

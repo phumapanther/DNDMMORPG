@@ -243,6 +243,23 @@ def get_top_text_players(limit=10):
     conn.close()
     return rows
 
+def get_all_players():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    # ดึงเฉพาะสิ่งที่ต้องใช้มาครับ
+    cursor.execute("SELECT user_id, total_online_time FROM players")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # แปลงกลับเป็น list ของ dict
+    players = []
+    for row in rows:
+        players.append({
+            "user_id": row[0],
+            "total_online_time": row[1]
+        })
+    return players
+
 def execute_custom_game_logic(user_id, action_type, **kwargs):
     """
     🔮 [จุดเตรียมพร้อมเพิ่มคำสั่งใหม่ในอนาคต]
