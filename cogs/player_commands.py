@@ -220,6 +220,7 @@ class PlayerCommands(commands.Cog):
         await ctx.send(embed=embed)
     
     @commands.command(name="bank")
+    @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def check_bank(self, ctx):
         # ดึงข้อมูลผู้เล่น
         player = player_model.get_player(ctx.author.id)
