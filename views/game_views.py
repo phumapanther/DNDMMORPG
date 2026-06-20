@@ -3,6 +3,8 @@ from discord.ui import View
 import random
 import models.player_model as player_model
 from views.profile_embed import ARMOR_STATS, GAME_CLASSES ,WEAPON_STATS,ITEM_CONFIG
+import traceback # เอาไว้ดูว่า Error บรรทัดไหน
+import json  
 
 # ==========================================================
 # 📊 [SKILL BALANCE CONFIG] คลังศูนย์กลางคุมบาลานซ์สกิลแบบละเอียด 100%
@@ -94,23 +96,42 @@ class MonsterEventView(View):
             # (ถ้าในคลาสใช้ชื่อตัวแปรอื่น เช่น self.user_id ให้เปลี่ยนตามความเหมาะสมครับ)
             player = player_model.get_player(user_id) 
             player_level = player.get("level", 0)
-            
+            last_evt = player.get("last_event", "none")
             rank_keys = list(MONSTER_RANKS.keys())
             
-            # 2. 🛠️ กำหนดน้ำหนักการสุ่ม (Weights) ตามช่วงเลเวล
-            if player_level >= 100:
-                spawn_weights = [10, 30, 20, 25, 15]
-            elif player_level >= 90:
-                spawn_weights = [30, 20, 20, 20, 10]
-            elif player_level >= 50:
-                spawn_weights = [50, 20, 20, 8, 2]
-            elif player_level >= 20:
-                spawn_weights = [70, 20, 5, 3, 2]
-            elif player_level >= 10:
-                spawn_weights = [80, 10, 5, 3, 2]
+            # 2. 🛠️ กำหนดน้ำหนักการสุ่ม (Weights)
+            # ตำแหน่งของเรท: [คอมมอน, มินิ, เมน, ซีเคร็ท, ไร้พ่าย]
+            
+            if last_evt == "mini_summon":
+                # ล็อกเป้า 100% เจอ มินิบอส (ตำแหน่งที่ 2)
+                spawn_weights = [0, 100, 0, 0, 0]
+                player_model.update_player_field(user_id, "last_event", "monster")
+                
+            elif last_evt == "main_summon":
+                # ล็อกเป้า 100% เจอ บอสหลัก (ตำแหน่งที่ 3)
+                spawn_weights = [0, 0, 100, 0, 0]
+                player_model.update_player_field(user_id, "last_event", "monster")
+                
+            elif last_evt == "unbeatable_summon":
+                # ล็อกเป้า 100% เจอ บอสไร้พ่าย (ตำแหน่งที่ 5)
+                spawn_weights = [0, 0, 0, 0, 100]
+                player_model.update_player_field(user_id, "last_event", "monster")
+                
             else:
-                # กรณีเลเวล 0 ถึง 9 (เจอมอนสเตอร์ระดับต่ำสุด 100%)
-                spawn_weights = [90, 5, 2, 2, 1] 
+                # ถ้าไม่ได้ใช้ใบเรียกบอส ให้สุ่มตามช่วงเลเวลปกติ
+                if player_level >= 100:
+                    spawn_weights = [10, 30, 20, 25, 15]
+                elif player_level >= 90:
+                    spawn_weights = [30, 20, 20, 20, 10]
+                elif player_level >= 50:
+                    spawn_weights = [50, 20, 20, 8, 2]
+                elif player_level >= 20:
+                    spawn_weights = [70, 20, 5, 3, 2]
+                elif player_level >= 10:
+                    spawn_weights = [80, 10, 5, 3, 2]
+                else:
+                    # กรณีเลเวล 0 ถึง 9 (เจอมอนสเตอร์ระดับต่ำสุด)
+                    spawn_weights = [95, 2, 1, 1, 1]
                 
             # 3. สุ่มมอนสเตอร์ตามน้ำหนักที่ได้จากเงื่อนไขด้านบน
             self.monster_rank = random.choices(rank_keys, weights=spawn_weights, k=1)[0]
@@ -314,12 +335,98 @@ class MonsterEventView(View):
 
         # [ลอจิกแพ้ชนะ เช็กเลเวลอัปคงเดิมตามโค้ดของคุณอาเธอร์...]
         if self.monster_hp <= 0:
+            # ชนะมอน
             reward = random.randint(30, 70) * self.m_stats["gold_mult"]
             gained_exp = self.m_stats["exp_reward"] + random.randint(5, 15)
-            db_updates["cash"] = player["cash"] + reward
+            
+            # เตรียม Dictionary สำหรับอัปเดตข้อมูล
+            db_updates = {}
+            db_updates["cash"] = player.get("cash", 0) + reward
             db_updates["last_event"] = "monster"
             db_updates["current_state"] = "idle"
             
+            # -----------------------------------------------------------------
+            # 🎁 ระบบสุ่มดรอปไอเทม (เช็กกระเป๋าเต็ม + แนะนำวิธีแก้)
+            # -----------------------------------------------------------------
+            dropped_item_msg = ""
+            dropped_item_id = None
+            
+            try:
+                # 1. ดึงข้อมูลสดๆ จากฐานข้อมูล
+                fresh_player = player_model.get_player(self.user_id)
+                raw_inv = fresh_player.get("inventory", [])
+                
+                # แปลงให้เป็น List ที่ใช้งานได้แน่นอน
+                if isinstance(raw_inv, str):
+                    try:
+                        import json
+                        inv_list = json.loads(raw_inv)
+                    except:
+                        inv_list = raw_inv.split(",") if "," in raw_inv else ([raw_inv] if raw_inv else [])
+                elif isinstance(inv_list, list):
+                    inv_list = raw_inv
+                else:
+                    inv_list = []
+                
+                # กรองค่าว่างทิ้ง
+                inv_list = [str(i).strip() for i in inv_list if str(i).strip()]
+
+                # 2. สุ่มดรอปไอเทม
+                m_tier = getattr(self, "monster_rank", "Common")
+                if m_tier in ["Secret", "Unbeatable"] and random.random() <= 0.01:
+                    dropped_item_id = random.choice(["8", "21"])
+                elif random.random() <= 0.70:
+                    if m_tier == "Common":
+                        drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18"]
+                    else:
+                        drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", 
+                                     "22", "23", "24", "25", "26", "27", "28", "3", "4", "5", "6", "7"]
+                    weights = [100000 / ITEM_CONFIG.get(i, {}).get("buy", 100) for i in drop_pool]
+                    dropped_item_id = random.choices(drop_pool, weights=weights, k=1)[0]
+
+                # 3. ตรวจสอบกระเป๋า (เพิ่มเงื่อนไข capacity == 0)
+                if dropped_item_id:
+                    dropped_item_name = ITEM_CONFIG.get(dropped_item_id, {}).get("name", "ไอเทมปริศนา")
+                    capacity = fresh_player.get("capacity", 10)
+                    current_count = len(inv_list)
+                    
+                    # ถ้า capacity เป็น 0 จะเป็น True เสมอ (ไม่จำกัด) หรือถ้าไม่ถึงขีดจำกัดก็จะ True
+                    if capacity == 0 or current_count < capacity:
+                        # กระเป๋ายังว่างหรือไม่จำกัด
+                        inv_list.append(str(dropped_item_id))
+                        import json
+                        db_updates["inventory"] = json.dumps(inv_list)
+                        
+                        # สร้างข้อความแสดงความจุ
+                        if capacity == 0:
+                            capacity_display = "(Unlimited)"
+                        else:
+                            capacity_display = f"({current_count + 1}/{capacity})"
+                        
+                        if dropped_item_id in ["8", "21"]:
+                            dropped_item_msg = f"\n🌟 **[ULTRA RARE DROP!]** พระเจ้ายิ้มรับ! คุณได้รับ `{dropped_item_name}` 1 ชิ้น!"
+                        else:
+                            dropped_item_msg = f"\n📦 **ดรอปไอเทม:** ได้รับ `{dropped_item_name}` 1 ชิ้น! {capacity_display}"
+                            
+                        print(f"✅ [DEBUG] ผู้เล่น {self.user_id} ได้รับไอเทม: {dropped_item_name}")
+                    else:
+                        # กระเป๋าเต็ม!
+                        dropped_item_msg = (
+                            f"\n⚠️ **กระเป๋าเต็ม!** มอนสเตอร์ดรอป `{dropped_item_name}` "
+                            f"แต่กระเป๋าของคุณเต็ม ({current_count}/{capacity})\n"
+                            f"👉 **วิธีแก้:** พิมพ์ `!drop` เพื่อทิ้งของเก่า หรือไปขายของที่ร้านค้าในเมือง!"
+                        )
+                        print(f"⚠️ [DEBUG] กระเป๋าผู้เล่น {self.user_id} เต็ม! ไอเทม {dropped_item_name} ถูกทิ้ง")
+
+            except Exception as e:
+                print(f"❌ [ERROR] ระบบดรอปไอเทมพัง: {e}")
+                import traceback
+                traceback.print_exc()
+            # -----------------------------------------------------------------
+
+            # -----------------------------------------------------------------
+            # 📈 ระบบคำนวณ EXP และ Level Up
+            # -----------------------------------------------------------------
             if player.get("current_state") == "dungeon_choice" or player.get("dungeon_steps", 0) > 0:
                 next_view = AdventureView(author_id=self.user_id) 
                 battle_end_log = f"\n⚔️ มอนสเตอร์ในชั้นนี้ถูกกำจัดแล้ว! เตรียมตัวเดินทางลึกเข้าไปในดันเจี้ยนขั้นถัดไป..."
@@ -327,66 +434,105 @@ class MonsterEventView(View):
                 next_view = AdventureView(author_id=self.user_id)
                 battle_end_log = ""
 
-            current_exp = player.get("exp", 0) + gained_exp
-            current_level = player.get("level", 1)
-            max_hp = player.get("max_hp", 100)
-            is_lv_up = False
+            try:
+                current_exp = player.get("exp", 0) + gained_exp
+                current_level = player.get("level", 1)
+                max_hp = player.get("max_hp", 100)
+                is_lv_up = False
+                
+                # ดัก Infinite Loop เผื่อเกิดข้อผิดพลาดในการคำนวณ
+                loop_failsafe = 0 
+                while loop_failsafe < 100:
+                    loop_failsafe += 1
+                    if current_level >= 100:
+                        current_exp = 0
+                        break
+                    
+                    required_exp = (current_level ** 2) * 70
+                    if current_exp >= required_exp:
+                        current_exp -= required_exp
+                        current_level += 1
+                        max_hp += 20
+                        is_lv_up = True
+                    else:
+                        break
+                
+                db_updates["exp"] = current_exp
+                db_updates["level"] = current_level
+                if is_lv_up:
+                    db_updates["max_hp"] = max_hp
+                    db_updates["hp"] = max_hp 
+                    print(f"🎉 [DEBUG] ผู้เล่น {self.user_id} เลเวลอัปเป็น Lv.{current_level}!")
             
-            while True:
-                if current_level >= 100:
-                    current_exp = 0
-                    break
-                required_exp = (current_level ** 2) * 70
-                if current_exp >= required_exp:
-                    current_exp -= required_exp
-                    current_level += 1
-                    max_hp += 20
-                    is_lv_up = True
-                else:
-                    break
-            
-            db_updates["exp"] = current_exp
-            db_updates["level"] = current_level
-            if is_lv_up:
-                db_updates["max_hp"] = max_hp
-                db_updates["hp"] = max_hp 
+            except Exception as e:
+                print(f"❌ [ERROR] ระบบคำนวณ EXP พัง: {e}")
+                traceback.print_exc()
 
-            rank_msg = ""
-            old_rank = player.get("rank", "F")
-            
-            if current_level >= 100: new_rank = "SSS"
-            elif current_level >= 80: new_rank = "A"
-            elif current_level >= 50: new_rank = "B"
-            elif current_level >= 20: new_rank = "C"
-            elif current_level >= 10: new_rank = "D"
-            elif current_level >= 5: new_rank = "E"
-            else: new_rank = "F"
-            
-            if old_rank != new_rank:
-                db_updates["rank"] = new_rank
-            
-            player_model.update_player_fields(self.user_id, db_updates)
-            
-            if old_rank != new_rank:
-                guild = interaction.guild
-                member = interaction.user
-                if guild and isinstance(member, discord.Member):
-                    role_name = f"นักผจญภัยแรงค์ {new_rank}"
-                    role = discord.utils.get(guild.roles, name=role_name)
-                    if role:
-                        try:
-                            await member.add_roles(role)
-                            rank_msg = f"\n🎖️ **สมาคมนักผจญภัยได้เลื่อนขั้นให้คุณเป็น: {role_name}!**"
-                        except Exception as e:
-                            print(f"⚠️ ระบบปรับบทบาทดิสคอร์ดขัดข้อง: {e}")
+            # -----------------------------------------------------------------
+            # 🎖️ ระบบอัปเดตยศและเซฟลงฐานข้อมูล
+            # -----------------------------------------------------------------
+            try:
+                rank_msg = ""
+                old_rank = player.get("rank", "F")
+                current_level = db_updates.get("level", player.get("level", 1)) # ใช้ค่าใหม่ล่าสุด
+                
+                if current_level >= 100: new_rank = "SSS"
+                elif current_level >= 80: new_rank = "A"
+                elif current_level >= 50: new_rank = "B"
+                elif current_level >= 20: new_rank = "C"
+                elif current_level >= 10: new_rank = "D"
+                elif current_level >= 5: new_rank = "E"
+                else: new_rank = "F"
+                
+                if old_rank != new_rank:
+                    db_updates["rank"] = new_rank
+                
+                # อัปเดตข้อมูลทั้งหมดลงฐานข้อมูลในครั้งเดียว
+                player_model.update_player_fields(self.user_id, db_updates)
+                
+                # ถ้าแรงค์เปลี่ยน ค่อยไปขอดิสคอร์ดเปลี่ยนยศ
+                if old_rank != new_rank:
+                    guild = interaction.guild
+                    member = interaction.user
+                    if guild and isinstance(member, discord.Member):
+                        role_name = f"นักผจญภัยแรงค์ {new_rank}"
+                        role = discord.utils.get(guild.roles, name=role_name)
+                        if role:
+                            try:
+                                await member.add_roles(role)
+                                rank_msg = f"\n🎖️ **สมาคมนักผจญภัยได้เลื่อนขั้นให้คุณเป็น: {role_name}!**"
+                                print(f"✅ [DEBUG] มอบยศ {role_name} ให้ {member.display_name} สำเร็จ")
+                            except discord.Forbidden:
+                                print(f"⚠️ [WARNING] บอทไม่มีสิทธิ์มอบยศ (Role Hierarchy ต่ำกว่าหรือขาด Permissions)")
+                            except Exception as e:
+                                print(f"❌ [ERROR] ระบบปรับยศดิสคอร์ดพัง: {e}")
+                        else:
+                            print(f"⚠️ [WARNING] ไม่พบยศชื่อ '{role_name}' ในเซิร์ฟเวอร์ดิสคอร์ด!")
 
-            lv_up_msg = f"\n✨🎉 **LEVEL UP!! คุณเลเวลเพิ่มขึ้นเป็น Lv.{current_level}** พลังชีวิตสูงสุดเพิ่มขึ้น เลือดฟื้นฟูเต็มเปี่ยม! ✨🎉" if is_lv_up else ""
-            required_xp_display = (current_level ** 2) * 70
+            except Exception as e:
+                print(f"❌ [ERROR] ระบบฐานข้อมูลหรือแรงค์พัง: {e}")
+                traceback.print_exc()
+
+            # -----------------------------------------------------------------
+            # 📩 การส่งข้อความกลับไปยัง Discord
+            # -----------------------------------------------------------------
+            try:
+                lv_up_msg = f"\n✨🎉 **LEVEL UP!! คุณเลเวลเพิ่มขึ้นเป็น Lv.{current_level}** พลังชีวิตสูงสุดเพิ่มขึ้น เลือดฟื้นฟูเต็มเปี่ยม! ✨🎉" if is_lv_up else ""
+                required_xp_display = (current_level ** 2) * 70
+                
+                final_content = f"{skill_log}{combat_log}🎉 **ยินดีด้วย! คุณสามารถโค่น {self.m_stats['name']} ลงได้สำเร็จ!**\n💰 ได้รับเงินรางวัล `{reward}` ทอง\n🔷 ได้รับค่าประสบการณ์ `+{gained_exp}` EXP *(สะสมปัจจุบัน: {current_exp}/{required_xp_display} XP)*{lv_up_msg}{rank_msg}{dropped_item_msg}{battle_end_log}"
+                
+                await interaction.response.edit_message(content=final_content, view=next_view)
             
-            await interaction.response.edit_message(
-                content=f"{skill_log}{combat_log}🎉 **ยินดีด้วย! คุณสามารถโค่น {self.m_stats['name']} ลงได้สำเร็จ!**\n💰 ได้รับเงินรางวัล `{reward}` ทอง\n🔷 ได้รับค่าประสบการณ์ `+{gained_exp}` EXP *(สะสมปัจจุบัน: {current_exp}/{required_xp_display} XP)*{lv_up_msg}{rank_msg}{battle_end_log}", 
-                view=next_view
-            )
+            except discord.NotFound:
+                print("⚠️ [WARNING] สู้จบนานเกินไป Interaction หมดอายุ (404 Not Found) กำลังส่งเป็นข้อความธรรมดาแทน...")
+                try:
+                    await interaction.channel.send(content=f"<@{self.user_id}> {final_content}", view=next_view)
+                except Exception as e:
+                    print(f"❌ [ERROR] ไม่สามารถส่งข้อความแทนได้: {e}")
+            except Exception as e:
+                print(f"❌ [ERROR] การแก้ไขข้อความพัง: {e}")
+                traceback.print_exc()
             
         elif player["hp"] <= 0:
             db_updates["current_state"] = "dead"
@@ -619,38 +765,60 @@ class BuySelectView(View):
 
     # 🛒 แก้ไขระบบซื้อ
     async def buy_callback(self, interaction: discord.Interaction):
-        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม เพื่อกันบอทขึ้น "การโต้ตอบล้มเหลว"
+        # 🛡️ 1. สั่ง Defer ทันทีที่กดปุ่ม
         await interaction.response.defer()
-
+        
         item_id = str(interaction.data["custom_id"])
         player = player_model.get_player(self.user_id)
-        price = ITEM_CONFIG[item_id]["buy"]
+        item_data = ITEM_CONFIG.get(item_id)
         
+        if not item_data:
+            return await interaction.followup.send("❌ ไอเทมนี้ไม่มีอยู่ในระบบ!", ephemeral=True)
+
+        price = item_data["buy"]
+        
+        # 🛡️ เช็กเงิน
         if player["cash"] < price:
-            # เปลี่ยนมาใช้ followup เพราะเรา defer ไปแล้ว
-            await interaction.followup.send("❌ เงินไม่พอ!", ephemeral=True) 
+            await interaction.followup.send("❌ เงินไม่พอ!", ephemeral=True)
             return
-            
-        raw_inv = player.get("inventory", "")
-        clean_inv = str(raw_inv)
-        for char in ["(", ")", "[", "]", "'", '"', " "]:
-            clean_inv = clean_inv.replace(char, "")
-            
-        inv = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
         
+        # 🛡️ เช็กว่าขายได้ไหม
+        if not item_data.get("purchasable", True):
+            await interaction.followup.send("❌ ไอเทมนี้ไม่สามารถซื้อจากร้านค้าได้!", ephemeral=True)
+            return
+
+        # 🧹 ดึงข้อมูลกระเป๋าและถอดรหัส
+        raw_inv = player.get("inventory", [])
+        # ตรวจสอบรูปแบบข้อมูลกระเป๋า (ต้องเป็น List เท่านั้น)
+        if isinstance(raw_inv, str):
+            inv = raw_inv.split(",") if raw_inv else []
+        elif isinstance(raw_inv, list):
+            inv = raw_inv
+        else:
+            inv = []
+
+        # 🛡️ 2. เช็กความจุ (Capacity) ก่อนซื้อ
+        capacity = player.get("capacity", 10)
+        # ถ้า capacity เป็น 0 คือไม่จำกัด (Unlimited)
+        if capacity != 0 and len(inv) >= capacity:
+            await interaction.followup.send(f"❌ กระเป๋าเต็มแล้ว! ({len(inv)}/{capacity}) กรุณาจัดการของในกระเป๋าก่อนซื้อเพิ่ม", ephemeral=True)
+            return
+
+        # 💰 ดำเนินการซื้อ (หักเงิน + เพิ่มไอเทม)
         inv.append(item_id)
         player["cash"] -= price
         
+        # อัปเดตฐานข้อมูล
         player_model.update_player_field(self.user_id, "cash", player["cash"])
-        player_model.update_player_field(self.user_id, "inventory", ",".join(inv))
+        player_model.update_player_field(self.user_id, "inventory", ",".join(inv)) # เก็บเป็น String คอมม่า
         
-        # 🛠️ รีเฟรชข้อความโดยซ่อนไอเทมขยะ
-        content = f"🛒 เลือกไอเทมที่ต้องการซื้อ: (เงินคงเหลือ: {player['cash']} ทอง)\n"
-        content += "\n".join([f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items() if v.get("purchasable", True)])
+        # 🛠️ รีเฟรชข้อความร้านค้า
+        # กรองเฉพาะไอเทมที่ซื้อได้มาแสดงผล
+        market_list = [f"**เลข {k}:** {v['name']} ({v['buy']} ทอง)" for k, v in ITEM_CONFIG.items() if v.get("purchasable", True)]
+        content = f"🛒 เลือกไอเทมที่ต้องการซื้อ: (เงินคงเหลือ: {player['cash']:,} ทอง)\n\n" + "\n".join(market_list)
         
-        # 🛡️ 2. เปลี่ยนมาใช้ edit_original_response
         await interaction.edit_original_response(content=content, view=self)
-        await interaction.followup.send(f"✅ ซื้อ {ITEM_CONFIG[item_id]['name']} เข้ากระเป๋า 1 ชิ้น!", ephemeral=True)
+        await interaction.followup.send(f"✅ ซื้อ {item_data['name']} เข้ากระเป๋าเรียบร้อย!", ephemeral=True)
 
     async def back_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(view=ShopEventView(self.user_id))
@@ -774,25 +942,44 @@ class TreasureEventView(View):
                 # 📦 กรณีโชคดีได้ไอเทมฟรี (ใช้ตรรกะออกยากตามราคาแบบเดียวกับ Shop)
                 item_ids = list(ITEM_CONFIG.keys())
                 weights = [1.0 / max(ITEM_CONFIG[i]["buy"], 1) for i in item_ids] 
-                
+
                 chosen_item_id = random.choices(item_ids, weights=weights, k=1)[0]
                 chosen_item = ITEM_CONFIG[chosen_item_id]
 
-                # 🛠️ ทำความสะอาดข้อมูลกระเป๋าก่อนยัดของใหม่
-                raw_inv = player.get("inventory", "")
-                clean_inv = str(raw_inv)
-                for char in ["(", ")", "[", "]", "'", '"', " "]:
-                    clean_inv = clean_inv.replace(char, "")
-                inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-                
-                # นำของเข้ากระเป๋า (ฟรี ไม่หักเงิน)
-                inv_array.append(chosen_item_id)
-                player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
-                
-                # print(f"DEBUG: [Treasure] User {self.user_id} แจ็คพอตแตก! เปิดได้ไอเทม {chosen_item['name']}")
+                # 🛠️ ทำความสะอาดข้อมูลกระเป๋า (ทำให้เป็น List ที่มั่นคง)
+                raw_inv = player.get("inventory", [])
+                if isinstance(raw_inv, str):
+                    # กรณีเป็น String (เช่น "15,12") หรือค่าว่าง
+                    inv_array = raw_inv.split(",") if raw_inv and raw_inv not in ["None", "null"] else []
+                else:
+                    # กรณีเป็น List อยู่แล้ว
+                    inv_array = raw_inv
+
+                # กรองค่าว่างทิ้ง
+                inv_array = [str(i).strip() for i in inv_array if str(i).strip()]
+
+                # 🛡️ เช็กกระเป๋าเต็มก่อนรับของ
+                capacity = player.get("capacity", 10)
+                if capacity == 0 or len(inv_array) < capacity:
+                    # กระเป๋ายังว่าง (หรือใส่ไม่จำกัด)
+                    inv_array.append(str(chosen_item_id))
+                    player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
+                    # inv_array.append(chosen_item_id)
+                    # player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
+                    success_msg = (
+                        f"🎉 แจ็คพอต!! หีบมี **{chosen_item['name']}** ซ่อนอยู่!\n"
+                        f"✅ คุณเก็บไอเทมล้ำค่าชิ้นนี้เข้ากระเป๋าไปได้ฟรีๆ!"
+                    )
+                else:
+                    # กระเป๋าเต็ม
+                    success_msg = (
+                        f"🎉 แจ็คพอต!! คุณเปิดหีบได้ **{chosen_item['name']}**!\n"
+                        f"⚠️ **แต่กระเป๋าของคุณเต็ม ({len(inv_array)}/{capacity}) เลยเก็บไม่ได้!**\n"
+                        f"👉 ลองพิมพ์ `!drop` เพื่อทิ้งของเก่า หรือขายของที่ร้านค้าในเมืองดูนะ!"
+                    )
 
                 await interaction.response.edit_message(
-                    content=f"🎉 แจ็คพอต!! หีบใบนี้ไม่ได้มีแค่เงิน แต่มี **{chosen_item['name']}** ซ่อนอยู่!\n✅ คุณเก็บไอเทมล้ำค่าชิ้นนี้เข้ากระเป๋าไปได้ฟรีๆ!\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
+                    content=f"{success_msg}\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?", 
                     view=AdventureView(author_id=self.user_id)
                 )
 
@@ -836,28 +1023,43 @@ class NpcEventView(View):
             )
             
         elif outcome == "shop":
-            # 1. คำนวณเรทสุ่มไอเทม (ไอเทมแพง = โอกาสน้อย)
+            # 1. คำนวณเรทสุ่มไอเทม
             item_ids = list(ITEM_CONFIG.keys())
-            # ใช้ 1 / ราคาซื้อ เพื่อสร้างน้ำหนัก ยิ่งราคามาก น้ำหนักยิ่งน้อยมาก
             weights = [1.0 / max(ITEM_CONFIG[i]["buy"], 1) for i in item_ids] 
             
             chosen_item_id = random.choices(item_ids, weights=weights, k=1)[0]
             chosen_item = ITEM_CONFIG[chosen_item_id]
             
-            # 2. สุ่มราคาขาย (ตั้งแต่ 0 ทอง จนถึง 2 เท่าของราคาเดิม)
+            # 2. สุ่มราคาขาย
             original_price = chosen_item["buy"]
             offered_price = random.randint(0, original_price * 2)
             
-            # 3. เช็กเงินว่าพอซื้อไหม
-            if player["cash"] >= offered_price:
-                # 🛠️ ทำความสะอาดข้อมูลกระเป๋าก่อนยัดของใหม่
-                raw_inv = player.get("inventory", "")
-                clean_inv = str(raw_inv)
-                for char in ["(", ")", "[", "]", "'", '"', " "]:
-                    clean_inv = clean_inv.replace(char, "")
-                inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
-                
-                # นำของเข้ากระเป๋าและหักเงิน
+            # 3. เตรียมข้อมูลกระเป๋าสำหรับเช็กความจุ
+            raw_inv = player.get("inventory", "")
+            clean_inv = str(raw_inv)
+            for char in ["(", ")", "[", "]", "'", '"', " "]:
+                clean_inv = clean_inv.replace(char, "")
+            inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+            
+            capacity = player.get("capacity", 10) # ดึงค่าความจุ (default 10)
+
+            # 4. เช็กเงื่อนไขการซื้อ
+            if player["cash"] < offered_price:
+                # กรณีเงินไม่พอ
+                msg = f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา `{offered_price:,}` ทอง!\n❌ **แต่เงินในกระเป๋าของคุณไม่พอ!** (คุณมีแค่ `{player['cash']:,}`) NPC จึงเก็บของแล้วเดินจากไป...\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?"
+            
+            elif capacity != 0 and len(inv_array) >= capacity:
+                # กรณีเงินพอ แต่กระเป๋าเต็ม
+                msg = (
+                    f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ในราคา `{offered_price:,}` ทอง!\n"
+                    f"⚠️ **แต่กระเป๋าของคุณเต็ม ({len(inv_array)}/{capacity})!** "
+                    f"ไม่สามารถรับไอเทมได้ NPC จึงเก็บของแล้วเดินจากไป...\n"
+                    f"----------------------------------------\n"
+                    f"คุณต้องการไปต่อหรือไม่?"
+                )
+            
+            else:
+                # กรณีซื้อสำเร็จ
                 inv_array.append(chosen_item_id)
                 new_cash = player["cash"] - offered_price
                 
@@ -865,12 +1067,13 @@ class NpcEventView(View):
                 player_model.update_player_field(self.user_id, "inventory", ",".join(inv_array))
                 
                 price_text = f"`{offered_price:,}` ทอง" if offered_price > 0 else "**ฟรี!!**"
-                msg = f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา {price_text}!\n✅ **คุณมีเงินพอจึงจ่ายเงินและรับของมาโดยอัตโนมัติ** (เงินเหลือ `{new_cash:,}`)\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?"
-                # print(f"DEBUG: [NPC Shop] สุ่มได้ {chosen_item['name']} ราคา {offered_price} -> ซื้อสำเร็จ")
-            else:
-                # กรณีเงินไม่พอ ข้ามทันที
-                msg = f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา `{offered_price:,}` ทอง!\n❌ **แต่เงินในกระเป๋าของคุณไม่พอ!** (คุณมีแค่ `{player['cash']:,}`) NPC จึงเก็บของแล้วเดินจากไป...\n----------------------------------------\nคุณต้องการไปต่อหรือไม่?"
-                # print(f"DEBUG: [NPC Shop] สุ่มได้ {chosen_item['name']} ราคา {offered_price} -> เงินไม่พอ (ข้าม)")
+                msg = (
+                    f"🧓 NPC พ่อค้าเร่เสนอขาย **{chosen_item['name']}** ให้คุณในราคา {price_text}!\n"
+                    f"✅ **คุณมีเงินและที่ว่างพอ จึงจ่ายเงินและรับของมาโดยอัตโนมัติ** "
+                    f"(เงินเหลือ `{new_cash:,}`)\n"
+                    f"----------------------------------------\n"
+                    f"คุณต้องการไปต่อหรือไม่?"
+                )
 
             await interaction.response.edit_message(
                 content=msg, 
@@ -1111,33 +1314,63 @@ class AdventureView(View):
             current_cooldown -= 1
             player_model.update_player_field(user_id, "village_cooldown", current_cooldown)
 
-        # 1. ดึงข้อมูลตัวแปรทั้งหมดมาก่อน (Cache Fetch)
+        # 1. ดึงข้อมูล
         dg_steps = player.get("dungeon_steps", 0)
         last_evt = player.get("last_event", "none")
 
-        # 2. ตรวจสอบลำดับความสำคัญ (เงื่อนไขบังคับ)
-        if dg_steps > 0:
-            chosen_event = "monster"
-            dg_steps -= 1
-            player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
-        elif last_evt == "treasure_trap":
-            chosen_event = "trap" 
+        # 2. จัดลำดับความสำคัญ (Priority Order)
+        
+        # [Priority 1: วาปกลับเมือง] - สำคัญที่สุด ต้องทำก่อนเสมอ
+        if last_evt == "warp_village":
+            chosen_event = "village"
+            dg_steps = 0  # รีเซ็ตดันเจี้ยนทิ้งทันที
+            player_model.update_player_field(user_id, "dungeon_steps", 0)
             
-        # 3. ถ้าไม่มีเหตุการณ์บังคับ ให้สุ่มตามปกติ
+        # [Priority 2: สแกนกล่องสมบัติ] - อยู่ในดันเจี้ยนได้ แต่ไม่ลบเทิร์น
+        elif last_evt == "scan_box":
+            chosen_event = "treasure"
+            # ไม่มีการลบ dg_steps
+            
+        # [Priority 3: เช็กสถานะอยู่ในดันเจี้ยน หรือ ใช้ใบเรียกบอส]
+        # เงื่อนไข: ถ้าอยู่ในดันเจี้ยน (dg_steps > 0) หรือ ใช้ใบเรียกบอส
+        elif dg_steps > 0 or last_evt in ["mini_summon", "main_summon", "unbeatable_summon"]:
+            
+            # ดักเคส: ถ้าอยู่ในดันเจี้ยน ห้ามใช้ warp_dungeon (Error/Block ไว้)
+            if dg_steps > 0 and last_evt == "warp_dungeon":
+                chosen_event = "monster" # บังคับสู้ต่อ
+            else:
+                chosen_event = "monster"
+            
+            # ถ้าอยู่ในดันเจี้ยน และเป็นเหตุการณ์มอนสเตอร์ ให้ลบเทิร์น
+            if dg_steps > 0:
+                dg_steps = max(0, dg_steps - 1)
+                player_model.update_player_field(user_id, "dungeon_steps", dg_steps)
+
+        # [Priority 4: เหตุการณ์พิเศษอื่นๆ ที่ไม่มีผลกับดันเจี้ยน]
+        elif last_evt == "treasure_trap":
+            chosen_event = "trap"
+        elif last_evt == "revive":
+            chosen_event = "village"
+        elif last_evt == "warp_dungeon":
+            # กรณีวาปเข้าดันเจี้ยน (เข้าได้เฉพาะตอนอยู่นอกดันเจี้ยน)
+            chosen_event = "dungeon"
+
+        # [Priority 5: สุ่มปกติ]
         else:
             if last_evt not in EVENT_WEIGHTS: 
                 last_evt = "none"
-
             current_weights = list(EVENT_WEIGHTS[last_evt])
-            
-            # ตัดโอกาสเจอหมู่บ้านถ้าติดคูลดาวน์
             if current_cooldown > 0:
-                current_weights[1] = 0  
-
+                current_weights[1] = 0 
             chosen_event = random.choices(EVENT_LIST, weights=current_weights, k=1)[0]
 
+        summon_events = ["mini_summon", "main_summon", "unbeatable_summon"]
         # 4. อัปเดต last_event
-        player_model.update_player_field(user_id, "last_event", chosen_event)
+        if chosen_event == "monster" and last_evt in summon_events:
+            pass # ไม่ต้องทำอะไร ปล่อย last_event เป็นค่าเรียกบอสเหมือนเดิม
+        else:
+            # ถ้าเป็นเหตุการณ์อื่นๆ ให้บันทึกลงฐานข้อมูลตามปกติ
+            player_model.update_player_field(user_id, "last_event", chosen_event)
         
         if chosen_event == "village":
             player_model.update_player_field(user_id, "village_cooldown", 10)

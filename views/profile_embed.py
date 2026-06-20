@@ -59,25 +59,54 @@ WEAPON_STATS = {
     "Legen_Weapon":  {"name": "🗡️ อาวุธในตำนาน", "atk": 999, "dur": 1000}
 }
 
+# ข้อมูลกระเป๋า
+BAG_STATS = {
+    "Small_Bag": {"name": "🎒 กระเป๋าเล็ก", "capacity": 10},
+    "Medium_Bag": {"name": "🎒 กระเป๋ากลาง", "capacity": 20},
+    "Large_Bag": {"name": "🎒 กระเป๋าใหญ่", "capacity": 30},
+    "Magic_Bag": {"name": "🎒 กระเป๋าเวทมนตร์", "capacity": 0}
+}
+
 ITEM_CONFIG = {
     # --- ไอเทมกดใช้ (Consumables) ---
-    "1": {"name": "🧪 ยาฮีล", "buy": 500, "sell": 250, "type": "use"},
-    "2": {"name": "🛠️ ใบซ่อมแซม", "buy": 800, "sell": 400, "type": "use"},
+    "1": {"name": "💉 ยาฮีล", "buy": 300, "sell": 100, "type": "use"}, 
+    "2": {"name": "🛠️ ใบซ่อมแซม", "buy": 500, "sell": 150, "type": "use"}, 
     
-    # --- หมวดชุดเกราะ (Armors) ---
-    "3": {"name": "🟫 เกราะหนังเบา", "buy": 1500, "sell": 750, "type": "armor", "equip_key": "Leather_L"},
-    "4": {"name": "🟫 เกราะหนังหนัก", "buy": 2500, "sell": 1250, "type": "armor", "equip_key": "Leather_H"},
-    "5": {"name": "⬜ เกราะเหล็กเบา", "buy": 5000, "sell": 2500, "type": "armor", "equip_key": "Steel_L"},
-    "6": {"name": "⬜ เกราะเหล็กหนัก", "buy": 10000, "sell": 5000, "type": "armor", "equip_key": "Steel_H"},
+    # --- หมวดชุดเกราะ (Armors) - ปรับราคาให้มีความก้าวหน้า ---
+    "3": {"name": "🟫 เกราะหนังเบา", "buy": 1000, "sell": 300, "type": "armor", "equip_key": "Leather_L"},
+    "4": {"name": "🟫 เกราะหนังหนัก", "buy": 3000, "sell": 900, "type": "armor", "equip_key": "Leather_H"},
+    "5": {"name": "⬜ เกราะเหล็กเบา", "buy": 8000, "sell": 2400, "type": "armor", "equip_key": "Steel_L"},
+    "6": {"name": "⬜ เกราะเหล็กหนัก", "buy": 20000, "sell": 6000, "type": "armor", "equip_key": "Steel_H"},
     
     # --- หมวดอาวุธ (Weapons) ---
-    "7": {"name": "⚔️ อาวุธเหล็ก", "buy": 4500, "sell": 2250, "type": "weapon", "equip_key": "Iron_Weapon"},
+    "7": {"name": "⚔️ อาวุธเหล็ก", "buy": 6000, "sell": 1800, "type": "weapon", "equip_key": "Iron_Weapon"},
     "8": {"name": "🗡️ อาวุธในตำนาน", "buy": 9999999, "sell": 1, "type": "weapon", "equip_key": "Legen_Weapon"},
 
-    # --- หมวดไอเทมขยะ (Junk / Loot) ห้ามซื้อในร้าน ---
-    "9": {"name": "🦴 เศษกระดูก", "buy": 100, "sell": 15, "type": "junk", "purchasable": False},
-    "10": {"name": "🕸️ ใยแมงมุม", "buy": 150, "sell": 25, "type": "junk", "purchasable": False},
-    "11": {"name": "💎 เศษอัญมณีหมองหม่น", "buy": 1000, "sell": 250, "type": "junk", "purchasable": False}
+    # --- หมวดไอเทมขยะ (Junk) 
+    "9": {"name": "🦴 เศษกระดูก", "buy": 100, "sell": 10, "type": "junk", "purchasable": False},
+    "10": {"name": "🕸️ ใยแมงมุม", "buy": 150, "sell": 15, "type": "junk", "purchasable": False},
+    "11": {"name": "💎 เศษอัญมณีหมองหม่น", "buy": 500, "sell": 50, "type": "junk", "purchasable": False},
+    "12": {"name": "🪨 เศษหิน", "buy": 50, "sell": 5, "type": "junk", "purchasable": False},
+    "13": {"name": "🪵 เศษไม้", "buy": 30, "sell": 3, "type": "junk", "purchasable": False},
+    "14": {"name": "🧪 ขวดสารเคมี", "buy": 200, "sell": 20, "type": "junk", "purchasable": False},
+    "15": {"name": "🧵 เศษด้าย", "buy": 20, "sell": 2, "type": "junk", "purchasable": False},
+    "16": {"name": "🪶 ขนนก", "buy": 40, "sell": 4, "type": "junk", "purchasable": False},
+    "17": {"name": "🪙 เหรียญเก่า", "buy": 100, "sell": 10, "type": "junk", "purchasable": False},
+    "18": {"name": "🧱 ก้อนอิฐ", "buy": 60, "sell": 6, "type": "junk", "purchasable": False},
+
+    # --- หมวดกระเป๋า (Bag) ---
+    "19": {"name": "👜 กระเป๋ากลาง", "buy": 15000, "sell": 3000, "type": "bag", "equip_key": "Medium_Bag"},
+    "20": {"name": "👜 กระเป๋าใหญ่", "buy": 40000, "sell": 8000, "type": "bag", "equip_key": "Large_Bag"},
+    "21": {"name": "🌌 กระเป๋าเวทมนตร์", "buy": 9999999, "sell": 1, "type": "bag", "equip_key": "Magic_Bag"},
+
+    # --- หมวดไอเทมกดใช้เวทมนตร์ (Consumables Magic) ---
+    "22": {"name": "📜ใบวาปเมือง", "buy": 500, "sell": 50, "type": "drop", "purchasable": False},
+    "23": {"name": "🔑กุญแจวาปดันเจี้ยน", "buy": 2000, "sell": 200, "type": "drop", "purchasable": False},
+    "24": {"name": "📃ใบเชิญมินิบอส", "buy": 8000, "sell": 1, "type": "drop", "purchasable": False},
+    "25": {"name": "📃ใบเชิญบอสหลัก", "buy": 35000, "sell": 1, "type": "drop", "purchasable": False},
+    "26": {"name": "📃ใบเชิญบอสไร้พ่าย", "buy": 80000, "sell": 1, "type": "drop", "purchasable": False},
+    "27": {"name": "📡เรดาร์สแกนกล่องสมบัติ", "buy": 3000, "sell": 300, "type": "drop", "purchasable": False},
+    "28": {"name": "💌ใบชุบชีวิต", "buy": 5000, "sell": 500, "type": "drop", "purchasable": False},
 }
 
 def create_profile_embed(target_member, player_data):

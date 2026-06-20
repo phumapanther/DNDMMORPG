@@ -7,7 +7,7 @@ import time
 import sqlite3
 from contextlib import contextmanager
 from utils import not_arrested, allowed_channels
-from views.profile_embed import ARMOR_STATS, GAME_CLASSES, WEAPON_STATS, ITEM_CONFIG
+from views.profile_embed import ARMOR_STATS, GAME_CLASSES, WEAPON_STATS, ITEM_CONFIG , BAG_STATS
 from views.game_views import DeathRespawnView
 
 class PlayerCommands(commands.Cog):
@@ -415,6 +415,55 @@ class PlayerCommands(commands.Cog):
             player_model.update_player_field(user_id, "weapon_dur", max_dur)
             
             msg = f"⚔️ คุณสวมใส่ **{item_name}** เรียบร้อยแล้ว! (ความคงทน: `{max_dur}/{max_dur}`)"
+        
+        elif item_type == "bag":
+            equip_key = item_info["equip_key"]
+            bag_status = BAG_STATS.get(equip_key, {})
+            bag_limit = bag_status.get("capacity", 10)
+
+            player_model.update_player_field(user_id, "bag", equip_key)
+            player_model.update_player_field(user_id, "capacity", bag_limit)
+        
+            msg = f"⚔️ คุณสวมใส่ **{item_name}** เรียบร้อยแล้ว! (ความจุกระเป๋า: `{bag_limit}`)"
+
+        elif item_type == "drop":
+            # 1. เช็กเคสพิเศษ: ใบชุบชีวิต (28) ต้องเช็กว่าตายไหม
+            if item_id == "28":
+                if player.get("hp") > 0 and player.get("current_state") != "death":
+                    return await ctx.send("❌ คุณยังไม่ได้ตาย จะใช้ใบชุบชีวิตไปทำไมล่ะเนี่ย! เก็บไว้ใช้ตอนตายดีหน้า!")
+                
+                # ถ้าตายจริง ให้ชุบชีวิต
+                max_hp = player.get("max_hp", 100)
+                player_model.update_player_field(user_id, "hp", max_hp)
+                player_model.update_player_field(user_id, "current_state", "idle")
+                player_model.update_player_field(user_id, "last_event", "revive") # ใส่เพื่อให้ระบบสุ่มเหตุการณ์รู้ว่าเพิ่งชุบ
+                
+                await ctx.send("✨ คุณใช้ `💌ใบชุบชีวิต`! ฟื้นคืนชีพและฟื้นฟู HP เต็มแล้ว! พร้อมลุยต่อแล้วครับ!")
+                # [ใส่คำสั่งลบไอเทมออกจากกระเป๋าที่นี่]
+
+            # 2. เคสไอเทม Drop อื่นๆ (ต้องเป็น idle เท่านั้น)
+            else:
+                if player.get("current_state") != "idle":
+                    return await ctx.send("❌ คุณไม่สามารถใช้ไอเทมนี้ได้ในขณะที่กำลังทำกิจกรรมอื่นอยู่ (ต้องอยู่ในสถานะว่างก่อนกดปุ่ม 🧭 เริ่มออกเดินทาง)!")
+
+                drop_map = {
+                    "22": "warp_village",
+                    "23": "warp_dungeon",
+                    "24": "mini_summon",
+                    "25": "main_summon",
+                    "26": "unbeatable_summon",
+                    "27": "scan_box"
+                }
+                
+                new_state = drop_map.get(item_id)
+                if new_state:
+                    player_model.update_player_field(user_id, "last_event", new_state)
+                    # [ใส่คำสั่งลบไอเทมออกจากกระเป๋าที่นี่]
+                    await ctx.send(f"✨ คุณได้เปิดใช้งาน `{item_name}` แล้ว! เตรียมพบกับเหตุการณ์ถัดไป...")
+                else:
+                    await ctx.send("❌ ไอเทมนี้ยังไม่ถูกตั้งค่าการใช้งาน!")
+        ##ตั้งเงื่อไขว่าต้องสเตตัสฑรรมดาเท่านั้นถึงใช้ ใบบอสได้ 
+        ##เวลาใช้ใบบอส เหตุการจะเป็นตีมอน และเหตุการลองจะเป็นเงื่อนไขบอส มั้ง ตั้งเงื่อไขคอมแบทตอนสุ่มมอน ถ้าสเตตัสนี้ เรทมอนอะไร
 
         # ถ้าไม่ตรงกับอะไรเลย
         else:
@@ -425,6 +474,141 @@ class PlayerCommands(commands.Cog):
         player_model.update_player_field(user_id, "inventory", ",".join(inv_array))
         
         await ctx.send(msg)
+    
+    @commands.command(name="drop")
+    async def drop_item(self, ctx, item_id: str = None, amount: int = None):
+        user_id = ctx.author.id
+        player = player_model.get_player(user_id)
+        
+        if not player:
+            return await ctx.send("❌ ไม่พบข้อมูลตัวละครของคุณ! พิมพ์ `!play` ก่อนนะ")
+
+        # ---------------------------------------------------------
+        # 1. 🧹 ถอดรหัสกระเป๋า (ใช้ Logic เดียวกับ !bag ของคุณอาเธอร์เป๊ะๆ)
+        # ---------------------------------------------------------
+        raw_inv = player.get("inventory", "")
+        clean_inv = str(raw_inv)
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            clean_inv = clean_inv.replace(char, "")
+            
+        inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+        inv_array = [i for i in inv_array if i] # กันเหนียว กรองพวกค่าว่างที่อาจจะหลุดมาทิ้งไป
+        
+        capacity = player.get("capacity", 10)
+
+        # ---------------------------------------------------------
+        # 2. 🧳 กรณีที่พิมพ์แค่ !drop (แสดงรายการกระเป๋า)
+        # ---------------------------------------------------------
+        if item_id is None:
+            from collections import Counter
+            item_counts = Counter(inv_array)
+            
+            embed = discord.Embed(title="🗑️ โยนไอเทมทิ้ง", color=discord.Color.red())
+            embed.add_field(name="ความจุกระเป๋า", value=f"{len(inv_array)} / {capacity}", inline=False)
+            
+            if not inv_array:
+                embed.description = "*~ กระเป๋าว่างเปล่า ไม่มีอะไรให้ทิ้ง ~*"
+            else:
+                drop_text = "💡 **วิธีใช้:** พิมพ์ `!drop [เลขไอเทม] [จำนวน]` เพื่อทิ้งของ\n\n**รายการที่มี:**\n"
+                for i_id, count in item_counts.items():
+                    if i_id in ITEM_CONFIG:
+                        item_name = ITEM_CONFIG[i_id]["name"]
+                        drop_text += f"**[{i_id}]** {item_name} x`{count}`\n"
+                    else:
+                        drop_text += f"**[{i_id}]** ❓ ไอเทมปริศนา x`{count}`\n"
+                embed.description = drop_text
+                
+            embed.set_thumbnail(url=ctx.author.display_avatar.url)
+            return await ctx.send(embed=embed)
+
+        # ---------------------------------------------------------
+        # 3. 🗑️ กรณีที่พิมพ์เพื่อทิ้งของ (เช่น !drop 22 1)
+        # ---------------------------------------------------------
+        if amount is None or amount <= 0:
+            return await ctx.send("❌ โปรดระบุจำนวนที่ต้องการทิ้งให้ถูกต้อง เช่น `!drop 22 1`")
+
+        # ตรวจสอบว่าในกระเป๋ามีของนี้พอไหม
+        current_count = inv_array.count(item_id)
+        if current_count < amount:
+            item_name = ITEM_CONFIG.get(item_id, {}).get("name", f"ไอเทมรหัส {item_id}")
+            return await ctx.send(f"❌ คุณมี {item_name} ไม่พอให้ทิ้ง! (ในกระเป๋ามีแค่ {current_count} ชิ้น)")
+
+        # ทำการลบไอเทมตามจำนวนที่ระบุ
+        for _ in range(amount):
+            inv_array.remove(item_id)
+            
+        # บันทึกข้อมูลกลับลงฐานข้อมูล (inv_array เป็น list แล้ว update_player_field จะแปลงเป็น JSON ให้เอง)
+        player_model.update_player_field(user_id, "inventory", inv_array)
+        
+        # แสดงข้อความยืนยัน
+        item_name = ITEM_CONFIG.get(item_id, {}).get("name", "ไอเทมปริศนา")
+        await ctx.send(f"🗑️ คุณได้โยน **{item_name}** ทิ้งไปจำนวน `{amount}` ชิ้นเรียบร้อยแล้ว!")
+    
+    @commands.command(name="give")
+    async def give_item_to_player(self, ctx, member: discord.Member = None, item_id: str = None, amount: int = 1):
+        # 1. เช็กความถูกต้องเบื้องต้น
+        if member is None or item_id is None:
+            return await ctx.send("❌ วิธีใช้: `!give @ชื่อเพื่อน [เลขไอเทม] [จำนวน]`\n💡 เช่น: `!give @Arthur 1 5`")
+            
+        if amount <= 0:
+            return await ctx.send("❌ จำนวนไอเทมต้องมากกว่า 0!")
+            
+        if member.id == ctx.author.id:
+            return await ctx.send("❌ คุณจะโอนของให้ตัวเองทำไมเนี่ย!")
+            
+        if member.bot:
+            return await ctx.send("❌ บอทไม่ต้องการไอเทมของคุณหรอกนะ!")
+
+        if item_id not in ITEM_CONFIG:
+            return await ctx.send(f"❌ ไม่พบไอเทมรหัส `{item_id}` ในระบบ!")
+
+        # 2. ดึงข้อมูลและถอดรหัสกระเป๋า "คนส่ง" (ตัวเราเอง)
+        sender_id = ctx.author.id
+        sender = player_model.get_player(sender_id)
+        
+        raw_inv_s = sender.get("inventory", "")
+        clean_inv_s = str(raw_inv_s)
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            clean_inv_s = clean_inv_s.replace(char, "")
+        sender_inv = clean_inv_s.split(",") if clean_inv_s and clean_inv_s not in ["None", "null"] else []
+        sender_inv = [i for i in sender_inv if i]
+
+        # ตรวจสอบว่าคนส่งมีของพอไหม
+        sender_item_count = sender_inv.count(item_id)
+        item_name = ITEM_CONFIG[item_id]["name"]
+        
+        if sender_item_count < amount:
+            return await ctx.send(f"❌ คุณมี {item_name} ไม่พอโอน! (ในกระเป๋าคุณมีแค่ {sender_item_count} ชิ้น)")
+
+        # 3. ดึงข้อมูลและถอดรหัสกระเป๋า "คนรับ" (เพื่อน)
+        receiver = player_model.get_player(member.id)
+        if not receiver:
+            return await ctx.send(f"❌ ไม่พบข้อมูลของ {member.display_name} ในระบบ (เขาต้องเคยพิมพ์เริ่มเล่นเกมก่อน)")
+
+        raw_inv_r = receiver.get("inventory", "")
+        clean_inv_r = str(raw_inv_r)
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            clean_inv_r = clean_inv_r.replace(char, "")
+        receiver_inv = clean_inv_r.split(",") if clean_inv_r and clean_inv_r not in ["None", "null"] else []
+        receiver_inv = [i for i in receiver_inv if i]
+
+        # เช็กความจุกระเป๋าคนรับ
+        receiver_capacity = receiver.get("capacity", 10)
+        if len(receiver_inv) + amount > receiver_capacity:
+            free_space = receiver_capacity - len(receiver_inv)
+            return await ctx.send(f"❌ กระเป๋าของ {member.display_name} เต็มแล้ว! (รับเพิ่มได้อีกแค่ {free_space} ชิ้น)")
+
+        # 4. ทำการโอนย้ายไอเทม (หักจากเรา -> ย้ายไปเพื่อน)
+        for _ in range(amount):
+            sender_inv.remove(item_id)
+            receiver_inv.append(item_id)
+
+        # 5. บันทึกข้อมูลกลับลงฐานข้อมูลทั้ง 2 คน
+        player_model.update_player_field(sender_id, "inventory", sender_inv)
+        player_model.update_player_field(member.id, "inventory", receiver_inv)
+
+        # 6. แจ้งเตือนความสำเร็จ
+        await ctx.send(f"🤝 **โอนไอเทมสำเร็จ!**\nคุณได้มอบ `{item_name}` จำนวน `{amount}` ชิ้น ให้กับ {member.mention} เรียบร้อยแล้ว!")
 
     # ==========================================
     # ⚔️ คำสั่ง PVP (!att @ผู้ใช้)
@@ -512,41 +696,38 @@ class PlayerCommands(commands.Cog):
     # ==========================================
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # 1. ข้ามข้อความที่บอทพิมพ์เอง เพื่อป้องกันบอทคุยกันเองจนลูป
         if message.author.bot:
             return
 
-        # 2. ดึงข้อมูลผู้เล่น
         player = player_model.get_player(message.author.id)
         if not player:
             return
 
-        # 3. เช็กสถานะ ถ้าตายอยู่จะเข้าเงื่อนไขนี้
         if player.get("current_state") == "death":
-            # อนุญาตให้พิมพ์ในช่องแชทโลกได้ปกติ
+            # 1. ยกเว้น: ถ้าเป็นแชทโลก
             if message.channel.name == "⌒🌍chat╯แชทโลก":
                 return
             
-            # ถ้าเป็นช่องอื่น จะทำการลบข้อความทิ้งทันที
+            # 2. ยกเว้น: ถ้าผู้เล่นพิมพ์ !use 28 เพื่อใช้ใบชุบ (เช็กจากข้อความ)
+            if message.content.strip() == "!use 28":
+                return # ปล่อยผ่านให้ระบบคำสั่งไปทำงานต่อเอง
+            
+            # 3. ถ้าไม่ใช่แชทโลก และไม่ใช่การพิมพ์ใช้ใบชุบ ให้ลบข้อความ
             try:
                 await message.delete()
             except discord.Forbidden:
-                pass # กันเหนียวเผื่อบอทไม่มีสิทธิ์ลบข้อความในช่องนั้น
+                pass
                 
-            # 4. เช็กว่าเคยส่งข้อความแจ้งเตือนปุ่มเกิดใหม่ไปหรือยัง?
+            # 4. ส่งข้อความเตือน (เช็กสถานะ last_event)
             if player.get("last_event") != "death_warned":
-                # ถ้ายังไม่เคยเตือน ให้ส่งปุ่มแจ้งเตือนไป
                 view = DeathRespawnView(message.author.id)
                 warning_msg = await message.channel.send(
-                    f"👻 {message.author.mention} **คุณเสียชีวิตอยู่!** วิญญาณไม่สามารถสื่อสารในช่องทางนี้ได้ (อนุญาตแค่ช่อง `⌒🌍chat╯แชทโลก`)\n"
-                    f"ต้องการจ่ายเงิน `1,000` ทอง เพื่อกลับไปเกิดใหม่ที่หมู่บ้านหรือไม่?",
+                    f"👻 {message.author.mention} **คุณเสียชีวิตอยู่!** วิญญาณไม่สามารถสื่อสารในช่องทางนี้ได้\n"
+                    f"ต้องการจ่ายเงิน `1,000` ทอง เพื่อกลับไปเกิดใหม่ หรือใช้ใบชุบชีวิต (`!use 28`) หรือไม่?",
                     view=view
                 )
                 view.message = warning_msg
-                
-                # อัปเดตฐานข้อมูลว่า "เตือนแล้วนะ" รอบหน้าจะได้ไม่ส่งอีก
                 player_model.update_player_field(message.author.id, "last_event", "death_warned")
-        
 
 # 🚨 ลบอันที่ซ้ำออกเหลือแค่อันเดียว
 async def setup(bot):

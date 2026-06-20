@@ -13,12 +13,17 @@ def init_db():
         CREATE TABLE IF NOT EXISTS players (
             user_id INTEGER PRIMARY KEY,
             level INTEGER DEFAULT 1,
+            exp INTEGER DEFAULT 0,
+            rank TEXT DEFAULT 'F',
             hp INTEGER DEFAULT 100,
             max_hp INTEGER DEFAULT 100,
-            cash INTEGER DEFAULT 500,
+            cash INTEGER DEFAULT 20000,
             bank INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             armor TEXT DEFAULT 'None',
+            armor_dur INTEGER DEFAULT 100,
+            weapon TEXT DEFAULT 'Wooden_Weapon',
+            weapon_dur INTEGER DEFAULT 50,
             current_state TEXT DEFAULT 'village',
             last_event TEXT DEFAULT 'none',
             last_death TEXT,
@@ -28,7 +33,8 @@ def init_db():
             arrest_until INTEGER DEFAULT 0,
             total_text INTEGER DEFAULT 0,
             event_text INTEGER DEFAULT 0,
-            exp INTEGER DEFAULT 0
+            bag TEXT DEFAULT 'Medium_Bag',
+            capacity INTEGER DEFAULT 10
         )
     """)
     conn.commit()
@@ -39,12 +45,12 @@ def get_player(user_id):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # 💡 ทริคใหม่: ใช้ list เก็บชื่อคอลัมน์เพื่อความง่ายในการดึงข้อมูล
     columns = [
-        "level", "hp", "max_hp", "cash", "bank", "inventory", "armor", 
-        "current_state", "last_event", "last_death", "village_cooldown", 
-        "dungeon_steps", "total_online_time", "arrest_until", 
-        "total_text", "event_text", "exp"
+        "level", "exp", "rank", "hp", "max_hp", "cash", "bank", "inventory", 
+        "armor", "armor_dur", "weapon", "weapon_dur", "current_state", 
+        "last_event", "last_death", "village_cooldown", "dungeon_steps", 
+        "total_online_time", "arrest_until", "total_text", "event_text", 
+        "bag", "capacity"
     ]
     
     query = f"SELECT {', '.join(columns)} FROM players WHERE user_id = ?"
@@ -52,19 +58,17 @@ def get_player(user_id):
     row = cursor.fetchone()
     
     if row is None:
-        # ถ้ายังไม่มีข้อมูล ให้ INSERT แค่ user_id เดี๋ยวค่า DEFAULT ในตารางจะจัดการใส่ค่าเริ่มต้นที่เหลือให้เองทั้งหมด!
         cursor.execute("INSERT INTO players (user_id) VALUES (?)", (user_id,))
         conn.commit()
-        # ดึงข้อมูลที่เพิ่งสร้างใหม่กลับมา เพื่อความชัวร์ 100%
         cursor.execute(query, (user_id,))
         row = cursor.fetchone()
         
     conn.close()
     
-    # จัดคู่ชื่อคอลัมน์กับข้อมูลอัตโนมัติ (ไม่ต้องมานั่งไล่ row[0], row[1] อีกต่อไป)
+    # จัดคู่ชื่อคอลัมน์กับข้อมูล
     player_data = dict(zip(columns, row))
     
-    # แปลง inventory กลับเป็น list อย่างปลอดภัย
+    # แปลง inventory กลับเป็น list
     try:
         player_data["inventory"] = json.loads(player_data["inventory"])
     except:

@@ -3,7 +3,8 @@ from discord.ext import commands
 from models import player_model  # ดึงโมเดลจัดการฐานข้อมูลมาใช้งาน
 from utils import has_role_or_owner, allowed_channels, not_arrested
 from views.profile_embed import ARMOR_STATS, GAME_CLASSES ,WEAPON_STATS,ITEM_CONFIG
-
+import sqlite3
+import json  
 import random
 
 class AdminCommands(commands.Cog):
@@ -278,7 +279,6 @@ class AdminCommands(commands.Cog):
                 print("🔥 [RESET ALL DEBUG - STEP 4] พบคีย์เวิร์ด 'all_data' ! เริ่มกระบวนการถล่มตารางฐานข้อมูล...")
                 
                 try:
-                    import sqlite3
                     # 🔌 1. เปิดการเชื่อมต่อตรงดิ่งไปที่ไฟล์ฐานข้อมูล (แก้ชื่อไฟล์ DB ให้ตรงกับเครื่องของคุณอาเธอร์ เช่น game_data.db หรือ database.db)
                     db_name = getattr(player_model, "DB_NAME", "game_data.db") # ดึงชื่อไฟล์จากโมเดล หรือใช้ค่า Default
                     conn = sqlite3.connect(db_name)
@@ -459,6 +459,7 @@ class AdminCommands(commands.Cog):
     @has_role_or_owner("꒰ PL ꒱ อัศวิน ⚔️") 
     @not_arrested() #ตรวจการถูกจับกุมก่อนอนุญาตให้ใช้คำสั่ง
     @commands.command(name="arrest")
+    @allowed_channels(["🚨ห้องแจ้งความ🚨"])
     async def arrest(self, ctx, target: discord.User = None, duration_mins: int = None):
         import time
         print(f"\n🔍 [ARREST STEP 1] เริ่มฟังก์ชัน !arrest | target: {target} | duration_mins: {duration_mins}")
@@ -510,6 +511,7 @@ class AdminCommands(commands.Cog):
     # ==========================================
     @has_role_or_owner("꒰ PL ꒱ อัศวิน ⚔️") # 🛠️ ล็อกสิทธิ์เฉพาะอัศวินและเจ้าของเซิร์ฟ
     @commands.command(name="fine")
+    @allowed_channels(["🚨ห้องแจ้งความ🚨"])
     async def fine_player(self, ctx, member: discord.Member, amount: int):
         # 1. ป้องกันการใส่ค่าติดลบหรือ 0
         if amount <= 0:
@@ -838,6 +840,230 @@ class AdminCommands(commands.Cog):
         player_model.update_player_field(member.id, "current_state", "death")
 
         await ctx.send(f"⚡ **สายฟ้าลงทัณฑ์!** {ctx.author.mention} ใช้อำนาจเบ็ดเสร็จปลิดชีพ {member.mention} จนดับดิ้นทันที! (HP: `0`, สถานะ: `death`) 💀")
+
+    # ==========================================
+    # ⚡ 1. คำสั่งเสกไอเทมให้ผู้เล่นรายคน (!spawn)
+    # ==========================================
+    @has_role_or_owner("คนบ้า") # 🛠️ ใช้ Decorator บล็อกยศคนบ้า
+    @commands.command(name="spawn")
+    @commands.has_permissions(administrator=True) # 🛡️ ล็อกสิทธิ์เฉพาะแอดมิน
+    async def spawn_item(self, ctx, member: discord.Member = None, item_id: str = None, amount: int = 1):
+        if member is None or item_id is None:
+            return await ctx.send("❌ วิธีใช้: `!spawn @ชื่อผู้เล่น [เลขไอเทม] [จำนวน]`\n💡 เช่น: `!spawn @Arthur 28 5`")
+
+        if item_id not in ITEM_CONFIG:
+            return await ctx.send(f"❌ ไม่พบไอเทมรหัส `{item_id}` ในระบบ!")
+            
+        if amount <= 0:
+            return await ctx.send("❌ จำนวนต้องมากกว่า 0 ครับแอดมิน!")
+
+        target_id = member.id
+        player = player_model.get_player(target_id)
+        
+        if not player:
+            return await ctx.send(f"❌ ไม่พบข้อมูลของ {member.display_name} ในระบบ")
+
+        # 🧹 ถอดรหัสและทำความสะอาดกระเป๋า
+        raw_inv = player.get("inventory", "")
+        clean_inv = str(raw_inv)
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            clean_inv = clean_inv.replace(char, "")
+        inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+        inv_array = [i for i in inv_array if i]
+
+        # ยัดของเข้ากระเป๋า (แอดมินเสกจะทะลุ Capacity ทันที)
+        for _ in range(amount):
+            inv_array.append(item_id)
+            
+        # บันทึกคืนฐานข้อมูล
+        player_model.update_player_field(target_id, "inventory", inv_array)
+        
+        item_name = ITEM_CONFIG[item_id]["name"]
+        await ctx.send(f"⚡ **[ADMIN]** ได้เสก `{item_name}` จำนวน `{amount}` ชิ้น เข้ากระเป๋าของ {member.mention} เรียบร้อยแล้ว!")
+
+    # ==========================================
+    # 🎉 2. คำสั่งเสกไอเทมให้ผู้เล่นทุกคน (!giveall)
+    # ==========================================
+    @has_role_or_owner("คนบ้า")
+    @commands.command(name="giveall")
+    @commands.has_permissions(administrator=True)
+    async def give_item_to_all(self, ctx, item_id: str = None, amount: int = 1):
+        if item_id is None:
+            return await ctx.send("❌ วิธีใช้: `!giveall [เลขไอเทม] [จำนวน]`\n💡 เช่น: `!giveall 22 1`")
+
+        if item_id not in ITEM_CONFIG:
+            return await ctx.send(f"❌ ไม่พบไอเทมรหัส `{item_id}` ในระบบ!")
+            
+        if amount <= 0:
+            return await ctx.send("❌ จำนวนต้องมากกว่า 0 ครับแอดมิน!")
+
+        await ctx.send("⏳ **[ระบบ]** กำลังดำเนินการแพ็คของขวัญแจกผู้เล่นทุกคน โปรดรอสักครู่...")
+
+        # 1. เชื่อมต่อฐานข้อมูล
+        db_name = getattr(player_model, "DB_NAME", "game_data.db")
+        conn = sqlite3.connect(db_name)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT user_id, inventory FROM players")
+        all_players = cursor.fetchall()
+
+        # 2. สร้างลิสต์เพื่อเตรียมข้อมูลสำหรับอัปเดตรวดเดียว
+        update_data = []
+        
+        for user_id, raw_inv in all_players:
+            # ทำความสะอาดข้อมูลเหมือนเดิม
+            clean_inv = str(raw_inv)
+            for char in ["(", ")", "[", "]", "'", '"', " "]:
+                clean_inv = clean_inv.replace(char, "")
+            
+            inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+            inv_array = [i for i in inv_array if i]
+
+            # 🚀 ทริคเพิ่มความเร็ว: ใช้ .extend เข้าไปทีเดียวแทนการวนลูป for
+            inv_array.extend([item_id] * amount)
+
+            # เก็บค่าใส่ List ในรูปแบบ Tuple: (ข้อมูลใหม่, user_id)
+            update_data.append((json.dumps(inv_array), user_id))
+
+        # ⚡ 3. ท่าไม้ตาย! อัปเดตฐานข้อมูลทุกคนพร้อมกันในคำสั่งเดียว
+        cursor.executemany("UPDATE players SET inventory = ? WHERE user_id = ?", update_data)
+
+        conn.commit()
+        conn.close()
+
+        item_name = ITEM_CONFIG[item_id]["name"]
+        count_players = len(update_data)
+        await ctx.send(f"🎉 **[ADMIN GLOBAL]** แจกของขวัญสำเร็จ!\nเสก `{item_name}` x`{amount}` ให้ผู้เล่นทุกคนในฐานข้อมูลเรียบร้อย! (รวมทั้งหมด `{count_players}` คน)")
+    
+    # ==========================================
+    # 🛡️ ระบบดัก Error กรณีผู้เล่นทั่วไปแอบใช้คำสั่งแอดมิน
+    # ==========================================
+    @spawn_item.error
+    @give_item_to_all.error
+    async def admin_commands_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("⛔ **ปฏิเสธคำสั่ง:** คุณไม่มีสิทธิ์ของระบบ (Administrator) ไม่สามารถใช้งานคำสั่งนี้ได้!")
+
+    # ==========================================
+    # 🧲 1. คำสั่งดึงไอเทมออกจากผู้เล่นรายคน (!remove)
+    # ==========================================
+    @has_role_or_owner("꒰ PL ꒱ อัศวิน ⚔️") 
+    @commands.command(name="remove")
+    @allowed_channels(["🚨ห้องแจ้งความ🚨"])
+    @commands.has_permissions(administrator=True) # 🛡️ ล็อกสิทธิ์เฉพาะแอดมิน
+    async def remove_item(self, ctx, member: discord.Member = None, item_id: str = None, amount: int = 1):
+        if member is None or item_id is None:
+            return await ctx.send("❌ วิธีใช้: `!remove @ชื่อผู้เล่น [เลขไอเทม] [จำนวน]`\n💡 เช่น: `!remove @Arthur 28 5`")
+
+        if item_id not in ITEM_CONFIG:
+            return await ctx.send(f"❌ ไม่พบไอเทมรหัส `{item_id}` ในระบบ!")
+            
+        if amount <= 0:
+            return await ctx.send("❌ จำนวนต้องมากกว่า 0 ครับแอดมิน!")
+
+        target_id = member.id
+        player = player_model.get_player(target_id)
+        
+        if not player:
+            return await ctx.send(f"❌ ไม่พบข้อมูลของ {member.display_name} ในระบบ")
+
+        # 🧹 ถอดรหัสและทำความสะอาดกระเป๋า
+        raw_inv = player.get("inventory", "")
+        clean_inv = str(raw_inv)
+        for char in ["(", ")", "[", "]", "'", '"', " "]:
+            clean_inv = clean_inv.replace(char, "")
+        inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+        inv_array = [i for i in inv_array if i]
+
+        # เช็กว่าเขามีไอเทมนี้กี่ชิ้น
+        current_count = inv_array.count(item_id)
+        item_name = ITEM_CONFIG[item_id]["name"]
+        
+        if current_count == 0:
+            return await ctx.send(f"❌ {member.display_name} ไม่มี `{item_name}` ในกระเป๋าเลยครับ!")
+
+        # 🧮 คำนวณยอดที่ริบได้จริง (ถ้าริบ 10 แต่เขามี 3 ก็ริบแค่ 3 จะได้ไม่ Error)
+        actual_remove = min(current_count, amount)
+
+        for _ in range(actual_remove):
+            inv_array.remove(item_id)
+            
+        # บันทึกคืนฐานข้อมูล
+        player_model.update_player_field(target_id, "inventory", inv_array)
+        
+        await ctx.send(f"🧲 **[ADMIN]** ได้ทำการริบ `{item_name}` จำนวน `{actual_remove}` ชิ้น ออกจากกระเป๋าของ {member.mention} เรียบร้อยแล้ว!")
+
+    # ==========================================
+    # 🌪️ 2. คำสั่งดึงไอเทมออกจากผู้เล่นทุกคน (!removeall)
+    # ==========================================
+    @has_role_or_owner("คนบ้า")
+    @commands.command(name="removeall")
+    @commands.has_permissions(administrator=True) # 🛡️ ล็อกสิทธิ์เฉพาะแอดมิน
+    async def remove_item_from_all(self, ctx, item_id: str = None, amount: int = 1):
+        if item_id is None:
+            return await ctx.send("❌ วิธีใช้: `!removeall [เลขไอเทม] [จำนวน]`\n💡 เช่น: `!removeall 22 1` (ริบทีละ 1 ชิ้นจากทุกคน)")
+
+        if item_id not in ITEM_CONFIG:
+            return await ctx.send(f"❌ ไม่พบไอเทมรหัส `{item_id}` ในระบบ!")
+            
+        if amount <= 0:
+            return await ctx.send("❌ จำนวนต้องมากกว่า 0 ครับแอดมิน!")
+
+        await ctx.send("⏳ **[ระบบ]** กำลังตรวจสอบและริบไอเทมจากผู้เล่นทุกคน โปรดรอสักครู่...")
+
+        # 1. เชื่อมต่อฐานข้อมูล
+        db_name = getattr(player_model, "DB_NAME", "game_data.db")
+        conn = sqlite3.connect(db_name)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT user_id, inventory FROM players")
+        all_players = cursor.fetchall()
+
+        update_data = []
+        affected_players = 0
+        total_removed = 0
+
+        # 2. วนลูปเช็กทุกคน
+        for user_id, raw_inv in all_players:
+            clean_inv = str(raw_inv)
+            for char in ["(", ")", "[", "]", "'", '"', " "]:
+                clean_inv = clean_inv.replace(char, "")
+            inv_array = clean_inv.split(",") if clean_inv and clean_inv not in ["None", "null"] else []
+            inv_array = [i for i in inv_array if i]
+
+            current_count = inv_array.count(item_id)
+            
+            # ถ้ายูสเซอร์คนนี้มีไอเทมเป้าหมาย ถึงจะทำการริบ
+            if current_count > 0:
+                actual_remove = min(current_count, amount)
+                for _ in range(actual_remove):
+                    inv_array.remove(item_id)
+                
+                # เก็บข้อมูลเฉพาะคนที่โดนริบ เพื่อเอาไปอัปเดต
+                update_data.append((json.dumps(inv_array), user_id))
+                affected_players += 1
+                total_removed += actual_remove
+
+        # 3. อัปเดตฐานข้อมูลเฉพาะคนที่โดนริบ (ใช้ executemany เพื่อความเร็วปานสายฟ้า)
+        if update_data:
+            cursor.executemany("UPDATE players SET inventory = ? WHERE user_id = ?", update_data)
+            conn.commit()
+            
+        conn.close()
+
+        item_name = ITEM_CONFIG[item_id]["name"]
+        
+        if affected_players == 0:
+            await ctx.send(f"✅ ตรวจสอบแล้ว ไม่มีใครในเซิร์ฟเวอร์ครอบครอง `{item_name}` เลยครับ!")
+        else:
+            await ctx.send(f"🌪️ **[ADMIN GLOBAL]** ปฏิบัติการกวาดล้างสำเร็จ!\nริบ `{item_name}` ไปทั้งหมด `{total_removed}` ชิ้น (จากผู้เล่น `{affected_players}` คน)")
+
+    # 🛡️ ดัก Error (แชร์ร่วมกับคำสั่งแอดมินอื่นๆ ได้เลย)
+    @remove_item.error
+    @remove_item_from_all.error
+    async def admin_remove_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("⛔ **ปฏิเสธคำสั่ง:** คุณไม่มีสิทธิ์ใช้งานคำสั่งนี้!")
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))

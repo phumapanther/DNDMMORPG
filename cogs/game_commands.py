@@ -21,10 +21,10 @@ class GameCommands(commands.Cog):
         user_id = ctx.author.id
         player = player_model.get_player(user_id)
         
-        print(f"🛒 [SHOP DEBUG] เริ่มคำสั่งโดย: {ctx.author.name} (ID: {user_id}) | action: {action} | item_num: {item_num}")
+        # print(f"🛒 [SHOP DEBUG] เริ่มคำสั่งโดย: {ctx.author.name} (ID: {user_id}) | action: {action} | item_num: {item_num}")
 
         if not player:
-            print(f"❌ [SHOP DEBUG] ไม่พบข้อมูลผู้เล่น ID: {user_id} ในฐานข้อมูล")
+            # print(f"❌ [SHOP DEBUG] ไม่พบข้อมูลผู้เล่น ID: {user_id} ในฐานข้อมูล")
             await ctx.send("❌ 不พบข้อมูลตัวละครของคุณ กรุณาพิมพ์ `!play` เพื่อลงทะเบียนก่อนครับ")
             return
 
@@ -40,7 +40,7 @@ class GameCommands(commands.Cog):
 
         # 🛑 เคสที่ 1: พิมพ์ !shop เฉยๆ -> บอทเปิดใบรายการหน้าร้านให้ดู
         if action is None:
-            print("📝 [SHOP DEBUG] เงื่อนไขที่ 1: เรียกดูหน้าร้านค้าหลักสำเร็จ")
+            # print("📝 [SHOP DEBUG] เงื่อนไขที่ 1: เรียกดูหน้าร้านค้าหลักสำเร็จ")
             embed = discord.Embed(
                 title="🛒 สมาคมนักผจญภัย - ร้านค้าตราเกียรติยศ & ตู้กาชาเวทมนตร์",
                 description=(
@@ -62,13 +62,13 @@ class GameCommands(commands.Cog):
 
         # 🛑 เคสที่ 2: พิมพ์คำสั่งซื้อแต่กรอกพารามิเตอร์ไม่ครบ
         if action not in ["ซื้อ", "buy"] or item_num is None:
-            print(f"⚠️ [SHOP DEBUG] เงื่อนไขที่ 2: กรอกพารามิเตอร์ไม่ครบหรือคำสั่งซื้อเพี้ยน (action={action})")
+            # print(f"⚠️ [SHOP DEBUG] เงื่อนไขที่ 2: กรอกพารามิเตอร์ไม่ครบหรือคำสั่งซื้อเพี้ยน (action={action})")
             await ctx.send("❓ **รูปแบบคำสั่งไม่ถูกต้อง:** กรุณาพิมพ์ `!shop ซื้อ [เลขไอเทม]` เช่น `!shop ซื้อ 1` ครับ")
             return
 
         # 🛑 เคสที่ 3: กรอกเลขไอเทมที่ไม่มีในร้าน
         if item_num not in shop_items:
-            print(f"❌ [SHOP DEBUG] เงื่อนไขที่ 3: ค้นหาเลขสินค้าไม่เจอในดิกชันนารี (ไอเทมเบอร์ {item_num})")
+            # print(f"❌ [SHOP DEBUG] เงื่อนไขที่ 3: ค้นหาเลขสินค้าไม่เจอในดิกชันนารี (ไอเทมเบอร์ {item_num})")
             await ctx.send("❌ **ไม่มีสินค้านี้ในระบบ:** กรุณาตรวจสอบเลขไอเทมใหม่อีกครั้ง")
             return
 
@@ -76,10 +76,10 @@ class GameCommands(commands.Cog):
         price = item["price"]
         current_cash = player.get("cash", 0)
 
-        print(f"💰 [SHOP DEBUG] ยืนยันข้อมูลราคาสินค้า: {item['name']} ราคา {price} ทอง | กระเป๋าเงินผู้เล่นปัจจุบัน: {current_cash} ทอง")
+        # print(f"💰 [SHOP DEBUG] ยืนยันข้อมูลราคาสินค้า: {item['name']} ราคา {price} ทอง | กระเป๋าเงินผู้เล่นปัจจุบัน: {current_cash} ทอง")
 
         if current_cash < price:
-            print(f"❌ [SHOP DEBUG] เงินทองไม่พอจ่าย: ขาดเงินทุนในการจ่ายสินค้ารายการนี้")
+            # print(f"❌ [SHOP DEBUG] เงินทองไม่พอจ่าย: ขาดเงินทุนในการจ่ายสินค้ารายการนี้")
             await ctx.send(f"❌ **ทองไม่พอ!** คุณมีเงินเพียง `{current_cash:,}` ทอง แต่ไอเทมนี้ราคา `{price:,}` ทองครับ")
             return
 
@@ -93,37 +93,37 @@ class GameCommands(commands.Cog):
         if item["type"] == "rank_role":
             target_role_name = item["role_name"]
             role = discord.utils.get(guild.roles, name=target_role_name)
-            print(f"🏆 [SHOP DEBUG] เริ่มตรวจสอบการสั่งซื้อยศแบบตรงตัว: {target_role_name}")
+            # print(f"🏆 [SHOP DEBUG] เริ่มตรวจสอบการสั่งซื้อยศแบบตรงตัว: {target_role_name}")
             
             if role:
                 if role in member.roles:
-                    print(f"⚠️ [SHOP DEBUG] ผู้เล่นมียศ {target_role_name} อยู่แล้ว สั่งเบรกคำสั่งซื้อ")
+                    # print(f"⚠️ [SHOP DEBUG] ผู้เล่นมียศ {target_role_name} อยู่แล้ว สั่งเบรกคำสั่งซื้อ")
                     await ctx.send(f"⚠️ คุณมีชั้นยศ **{target_role_name}** อยู่กับตัวแล้วครับ!")
                     return
                 
                 try:
                     player_model.update_player_field(user_id, "cash", new_cash)
                     await member.add_roles(role)
-                    print(f"✅ [SHOP DEBUG] ดำเนินการแอดเพิ่มยศ {target_role_name} และบันทึกเงิน {new_cash} เรียบร้อย")
+                    # print(f"✅ [SHOP DEBUG] ดำเนินการแอดเพิ่มยศ {target_role_name} และบันทึกเงิน {new_cash} เรียบร้อย")
                     await ctx.send(f"✨ 🎉 **ซื้อยศสำเร็จ!** สมาคมได้มอบยศ **{target_role_name}** ให้แก่คุณเรียบร้อยแล้ว!")
                 except discord.Forbidden:
-                    print("🚨 [SHOP ERROR] Discord บล็อกสิทธิ์ (Forbidden) ลำดับเลเยอร์ยศบอทต่ำกว่ายศเป้าหมาย!")
+                    # print("🚨 [SHOP ERROR] Discord บล็อกสิทธิ์ (Forbidden) ลำดับเลเยอร์ยศบอทต่ำกว่ายศเป้าหมาย!")
                     await ctx.send("❌ บอทไม่มีสิทธิ์แจกยศนี้ให้คุณได้ (กรุณาแจ้งแอดมินให้ช่วยปรับยศบอทขึ้นสูงด้านบนสุดในเซิร์ฟเวอร์)")
             else:
-                print(f"❌ [SHOP ERROR] ไม่พบคลังข้อมูลชื่อยศ {target_role_name} ในหน้าเซิร์ฟเวอร์ดิสคอร์ด")
+                # print(f"❌ [SHOP ERROR] ไม่พบคลังข้อมูลชื่อยศ {target_role_name} ในหน้าเซิร์ฟเวอร์ดิสคอร์ด")
                 await ctx.send(f"❌ **พบข้อผิดพลาด:** ไม่พบชื่อยศ `{target_role_name}` ในเซิร์ฟเวอร์ดิสคอร์ดนี้")
 
         # ==========================================================
         # 👲🏻 [ประเภทที่ 2]: ตู้กาชาเผ่ามนุษย์ (รายการ 4)
         # ==========================================================
         elif item["type"] == "gacha_human":
-            print("🔵 [SHOP DEBUG] กำลังสุ่มตู้กาชาเผ่ามนุษย์...")
+            # print("🔵 [SHOP DEBUG] กำลังสุ่มตู้กาชาเผ่ามนุษย์...")
             chosen_race_name = random.choice(GAME_RACES)
             new_role = discord.utils.get(guild.roles, name=chosen_race_name)
-            print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้: {chosen_race_name}")
+            # print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้: {chosen_race_name}")
             
             if not new_role:
-                print(f"❌ [SHOP ERROR] หาวัตถุยศไม่เจอตามชื่อยศ: {chosen_race_name}")
+                # print(f"❌ [SHOP ERROR] หาวัตถุยศไม่เจอตามชื่อยศ: {chosen_race_name}")
                 await ctx.send(f"⚠️ สุ่มได้เผ่า `{chosen_race_name}` แต่หาระบบยศในดิสคอร์ดไม่เจอ")
                 return
 
@@ -136,27 +136,27 @@ class GameCommands(commands.Cog):
                 
                 await member.edit(roles=updated_roles)
                 removed_msg = f" (ปลดเผ่าเดิม: `{removed_races[0]}` ออกแล้ว)" if removed_races else ""
-                print(f"✅ [SHOP DEBUG] สลับยศเผ่ามนุษย์เสร็จสิ้น เงินคงเหลือล่าสุด: {new_cash}")
+                # print(f"✅ [SHOP DEBUG] สลับยศเผ่ามนุษย์เสร็จสิ้น เงินคงเหลือล่าสุด: {new_cash}")
                 await ctx.send(
                     f"🎰🔮 **[ตู้กาชาโบราณ]** คุณ {member.mention} ได้ฉีกคัมภีร์สุ่มเผ่าพันธุ์สำเร็จ!\n"
                     f"🧬 พรแห่งโชคชะตาเปลี่ยนร่างของคุณเป็น: **{chosen_race_name}** ✨{removed_msg}\n"
                     f"💸 เสียค่าธรรมเนียมกาชา: `- {price:,}` ทอง (คงเหลือ: `{new_cash:,}` ทอง)"
                 )
             except discord.Forbidden:
-                print("🚨 [SHOP ERROR] ไม่สามารถแก้ไขยศได้เนื่องจากลำดับยศบอทอยู่ต่ำเกินไป")
+                # print("🚨 [SHOP ERROR] ไม่สามารถแก้ไขยศได้เนื่องจากลำดับยศบอทอยู่ต่ำเกินไป")
                 await ctx.send("❌ บอทไม่มีสิทธิ์จัดการยศแก้ไขโครงสร้างยศเผ่าพันธุ์ของคุณ")
 
         # ==========================================================
         # 👹 [ประเภทที่ 3]: ตู้กาชาเผ่าปีศาจ (รายการ 5)
         # ==========================================================
         elif item["type"] == "gacha_monster":
-            print("🔴 [SHOP DEBUG] กำลังสุ่มตู้กาชาเผ่าปีศาจมอนสเตอร์...")
+            # print("🔴 [SHOP DEBUG] กำลังสุ่มตู้กาชาเผ่าปีศาจมอนสเตอร์...")
             chosen_monster_name = random.choice(MONSTER_RACES)
             new_role = discord.utils.get(guild.roles, name=chosen_monster_name)
-            print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้: {chosen_monster_name}")
+            # print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้: {chosen_monster_name}")
             
             if not new_role:
-                print(f"❌ [SHOP ERROR] หาวัตถุยศไม่เจอตามชื่อยศปีศาจ: {chosen_monster_name}")
+                # print(f"❌ [SHOP ERROR] หาวัตถุยศไม่เจอตามชื่อยศปีศาจ: {chosen_monster_name}")
                 await ctx.send(f"⚠️ สุ่มได้ปีศาจ `{chosen_monster_name}` แต่หาระบบยศในดิสคอร์ดไม่เจอ")
                 return
 
@@ -168,27 +168,27 @@ class GameCommands(commands.Cog):
                 
                 await member.edit(roles=updated_roles)
                 removed_msg = f" (ปลดเผ่าเดิม: `{removed_races[0]}` ออกแล้ว)" if removed_races else ""
-                print(f"✅ [SHOP DEBUG] สลับยศเผ่าปีศาจเสร็จสิ้น เงินคงเหลือล่าสุด: {new_cash}")
+                # print(f"✅ [SHOP DEBUG] สลับยศเผ่าปีศาจเสร็จสิ้น เงินคงเหลือล่าสุด: {new_cash}")
                 await ctx.send(
                     f"🎲 🔥 **[กาชาสุ่มเผ่าปีศาจ]** จิตวิญญาณสยบสู่ความมืดสลัดร่างเดิมทิ้งพังทลาย!\n"
                     f"👑 พลังแห่งมิติเวทมนตร์เลือกเผ่าใหม่ให้คุณคือ: **{chosen_monster_name}** 🔴{removed_msg}\n"
                     f"💸 เสียค่าธรรมเนียมกาชา: `- {price:,}` ทอง (คงเหลือ: `{new_cash:,}` ทอง)"
                 )
             except discord.Forbidden:
-                print("🚨 [SHOP ERROR] บอทไม่มีสิทธิ์สลับแก้ไขลำดับยศของผู้เล่น")
+                # print("🚨 [SHOP ERROR] บอทไม่มีสิทธิ์สลับแก้ไขลำดับยศของผู้เล่น")
                 await ctx.send("❌ บอทไม่มีสิทธิ์จัดการยศแก้ไขโครงสร้างยศเผ่าพันธุ์ของคุณ")
 
         # ==========================================================
         # 🔮 [ประเภทที่ 4]: ตู้กาชาเปลี่ยนคลาสอาชีพ (รายการ 6)
         # ==========================================================
         elif item["type"] == "gacha_class":
-            print("🔮 [SHOP DEBUG] กำลังดำเนินการตู้กาชาปรับเปลี่ยนคลาสอาชีพ...")
+            # print("🔮 [SHOP DEBUG] กำลังดำเนินการตู้กาชาปรับเปลี่ยนคลาสอาชีพ...")
             chosen_class_name = random.choice(GAME_CLASSES)
             new_role = discord.utils.get(guild.roles, name=chosen_class_name)
-            print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้คลาส: {chosen_class_name}")
+            # print(f"🎲 [SHOP DEBUG] ผลการสุ่มได้คลาส: {chosen_class_name}")
             
             if not new_role:
-                print(f"❌ [SHOP ERROR] ค้นหายศอาชีพเป้าหมายไม่เจอในระบบเซิร์ฟเวอร์: {chosen_class_name}")
+                # print(f"❌ [SHOP ERROR] ค้นหายศอาชีพเป้าหมายไม่เจอในระบบเซิร์ฟเวอร์: {chosen_class_name}")
                 await ctx.send(f"⚠️ สุ่มได้คลาส `{chosen_class_name}` แต่หาระบบยศในดิสคอร์ดไม่เจอ")
                 return
 
@@ -200,14 +200,14 @@ class GameCommands(commands.Cog):
                 
                 await member.edit(roles=updated_roles)
                 removed_msg = f" (สละอาชีพเดิม: `{removed_classes[0]}` เคลียร์ออกเรียบร้อย)" if removed_classes else ""
-                print(f"✅ [SHOP DEBUG] สลับอาชีพใหม่สำเร็จแล้ว เงินคงเหลือล่าสุด: {new_cash}")
+                # print(f"✅ [SHOP DEBUG] สลับอาชีพใหม่สำเร็จแล้ว เงินคงเหลือล่าสุด: {new_cash}")
                 await ctx.send(
                     f"🔮✨ **[แท่นทำนายวิญญาณ]** คุณ {member.mention} ได้เบิกเนตรสุ่มคลาสอาชีพใหม่สำเร็จ!\n"
                     f"⚔️ จิตวิญญาณแห่งการต่อสู้เลือกให้คุณเป็นคลาส: **{chosen_class_name}** 🛡️{removed_msg}\n"
                     f"💸 เสียค่าธูปทำนายวิญญาณ: `- {price:,}` ทอง (คงเหลือ: `{new_cash:,}` ทอง)"
                 )
             except discord.Forbidden:
-                print("🚨 [SHOP ERROR] ไม่สามารถแก้ไขสิทธิ์จัดการปรับยศคลาสอาชีพได้")
+                # print("🚨 [SHOP ERROR] ไม่สามารถแก้ไขสิทธิ์จัดการปรับยศคลาสอาชีพได้")
                 await ctx.send("❌ บอทไม่มีสิทธิ์จัดการยศ กรุณาลากยศบอทให้อยู่สูงกว่ายศคลาสอาชีพทั้งหมดด้วยครับ")
 
     # ─── 📊 คำสั่งพิมพ์ดูโปรไฟล์ ───
@@ -277,7 +277,7 @@ class GameCommands(commands.Cog):
                 try:
                     await member.add_roles(*roles_to_add)
                     role_names_str = ", ".join([r.name for r in roles_to_add])
-                    print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
+                    # print(f"🏅 [Auto-Sync] เติมยศที่ขาดหายให้คุณ {member.name}: {role_names_str}")
                 except discord.Forbidden:
                     print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (Manage Roles) ตอนรันคำสั่ง !play")
                 except Exception as e:
