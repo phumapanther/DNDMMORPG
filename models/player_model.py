@@ -285,6 +285,7 @@ def check_jail_status(user_id):
             return True # หลุดจากคุกแล้ว
     return False # ยังติดคุกอยู่
 
+
 from discord.ext import tasks
 
 @tasks.loop(minutes=1.0)
@@ -308,3 +309,21 @@ def execute_raw_sql(sql):
     cursor.execute(sql)
     conn.commit()  # ต้องมีบรรทัดนี้ ไม่งั้นข้อมูลไม่เซฟ
     conn.close()
+
+def load_inventory(raw_inv):
+    """ฟังก์ชันสำหรับโหลดและแปลงกระเป๋าเป็น List เสมอ"""
+    # 1. ถ้าเป็น List อยู่แล้ว ส่งคืนทันที
+    if isinstance(raw_inv, list):
+        return raw_inv
+    
+    # 2. ถ้าเป็นค่าว่างหรือค่าที่อ่านไม่ได้
+    if not raw_inv or raw_inv in ["None", "null", ""]:
+        return []
+    
+    # 3. ลองอ่านแบบ JSON
+    try:
+        return json.loads(raw_inv)
+    except (json.JSONDecodeError, TypeError):
+        # 4. ถ้าไม่ใช่ JSON ให้ใช้วิธีล้าง String แล้ว Split
+        clean_inv = str(raw_inv).replace("[", "").replace("]", "").replace("'", "").replace('"', "").replace(" ", "")
+        return [x for x in clean_inv.split(",") if x]

@@ -7,8 +7,10 @@ import time
 import sqlite3
 from contextlib import contextmanager
 from utils import not_arrested, allowed_channels
-from views.profile_embed import ARMOR_STATS, GAME_CLASSES, WEAPON_STATS, ITEM_CONFIG , BAG_STATS
+from views.profile_embed import ARMOR_STATS, GAME_CLASSES, WEAPON_STATS, ITEM_CONFIG, BAG_STATS, CRAFTING_RECIPES
 from views.game_views import DeathRespawnView
+import json
+import traceback # อย่าลืม import อันนี้ที่ด้านบนสุดของไฟล์นะครับ
 
 class PlayerCommands(commands.Cog):
     def __init__(self, bot):
@@ -244,8 +246,18 @@ class PlayerCommands(commands.Cog):
             color=discord.Color.blue()
         )
 
+        # 2. คำนวณความจุ
+        capacity = player.get("capacity", 10)
+        current_count = len(inv_array)
+        cap_display = "ไม่จำกัด" if capacity == 0 else f"{current_count} / {capacity}"
+
+        # 3. แสดงผลใน Embed
         if not inv_array:
-            embed.add_field(name="📦 ไอเทมในกระเป๋า", value="*~ กระเป๋าว่างเปล่า ไม่มีไอเทมเลย ~*", inline=False)
+            embed.add_field(
+                name=f"📦 ไอเทมในกระเป๋า ({cap_display})", 
+                value="*~ กระเป๋าว่างเปล่า ไม่มีไอเทมเลย ~*", 
+                inline=False
+            )
         else:
             item_counts = Counter(inv_array)
             bag_list_text = ""
@@ -259,7 +271,11 @@ class PlayerCommands(commands.Cog):
                     print(f"WARNING: [Bag] พบ Item ID '{item_id}' ในกระเป๋าผู้เล่น แต่ไม่มีใน ITEM_CONFIG!")
                     bag_list_text += f"**[{item_id}]** ❓ ไอเทมปริศนา x`{count}` ชิ้น\n"
 
-            embed.add_field(name="📦 ไอเทมในกระเป๋า", value=bag_list_text, inline=False)
+            embed.add_field(
+                name=f"📦 ไอเทมในกระเป๋า ({len(inv_array)} / {'ไม่จำกัด' if capacity == 0 else capacity})", 
+                value=bag_list_text, 
+                inline=False
+            )
 
         # 💡 แนะนำเสริม: ใช้ display_avatar เพื่อป้องกันบั๊กเวลาคนไม่มีรูปโปรไฟล์
         embed.set_thumbnail(url=ctx.author.display_avatar.url)
@@ -424,7 +440,7 @@ class PlayerCommands(commands.Cog):
             player_model.update_player_field(user_id, "bag", equip_key)
             player_model.update_player_field(user_id, "capacity", bag_limit)
         
-            msg = f"⚔️ คุณสวมใส่ **{item_name}** เรียบร้อยแล้ว! (ความจุกระเป๋า: `{bag_limit}`)"
+            msg = f"⚔️ คุณสวมใส่ **{item_name}** เรียบร้อยแล้ว! (ความจุกระเป๋า: `{'ไม่จำกัด' if bag_limit == 0 else bag_limit}`)"
 
         elif item_type == "drop":
             # 1. เช็กเคสพิเศษ: ใบชุบชีวิต (28) ต้องเช็กว่าตายไหม
@@ -504,7 +520,7 @@ class PlayerCommands(commands.Cog):
             item_counts = Counter(inv_array)
             
             embed = discord.Embed(title="🗑️ โยนไอเทมทิ้ง", color=discord.Color.red())
-            embed.add_field(name="ความจุกระเป๋า", value=f"{len(inv_array)} / {capacity}", inline=False)
+            embed.add_field(name="ความจุกระเป๋า", value=f"{len(inv_array)} / {'ไม่จำกัด' if capacity == 0 else capacity}", inline=False)
             
             if not inv_array:
                 embed.description = "*~ กระเป๋าว่างเปล่า ไม่มีอะไรให้ทิ้ง ~*"
@@ -728,6 +744,79 @@ class PlayerCommands(commands.Cog):
                 )
                 view.message = warning_msg
                 player_model.update_player_field(message.author.id, "last_event", "death_warned")
+
+    # 📜 คำสั่งเช็กสูตรคราฟ (ปรับให้ดึงจากโครงสร้างใหม่)
+    @commands.command(name="recipes")
+    async def show_recipes(self, ctx):
+        msg = "📜 **สูตรการคราฟไอเทม (พิมพ์ `!craft [เลขไอเทม]` เพื่อเริ่มคราฟ):**\n"
+        for item_id, data in CRAFTING_RECIPES.items():
+            name = ITEM_CONFIG[item_id]['name']
+            recipe = data["recipe"]
+            fail_rate = int(data["fail_rate"] * 100)
+            ing_list = [f"{ITEM_CONFIG[ing_id]['name']} x{amt}" for ing_id, amt in recipe.items()]
+            # เพิ่ม [ID: item_id] เข้าไปหน้าชื่อ
+            msg += f"• **[ID: {item_id}] {name}** (Fail: {fail_rate}%): ใช้ {', '.join(ing_list)}\n"
+        await ctx.send(msg)
+
+    # 🛠️ คำสั่งคราฟไอเทม (ปรับให้ใช้ fail_rate ของแต่ละไอเทม)
+    @commands.command(name="craft")
+    async def craft_item(self, ctx, item_id: str = None):
+        # เริ่มการ Debug
+        print(f"🔧 [DEBUG] เริ่มต้นการคราฟ | User: {ctx.author.id} | ไอเทม ID: {item_id}")
+        
+        try:
+            if not item_id or item_id not in CRAFTING_RECIPES:
+                return await ctx.send("❌ รหัสไอเทมนี้ไม่มีสูตรคราฟ หรือรหัสไม่ถูกต้อง!")
+            
+            player = player_model.get_player(ctx.author.id)
+            raw_inv = player.get("inventory", [])
+            
+            # 🛠️ เรียกใช้ผ่าน player_model ได้เลย!
+            inv_list = player_model.load_inventory(raw_inv)
+            
+            recipe_data = CRAFTING_RECIPES[item_id]
+            recipe = recipe_data["recipe"]
+            fail_rate = recipe_data.get("fail_rate", 0.2)
+            
+            # 1. เช็กวัตถุดิบ
+            for ing_id, amount in recipe.items():
+                ing_id_str = str(ing_id)
+                current_count = inv_list.count(ing_id_str)
+                if current_count < amount:
+                    needed_name = ITEM_CONFIG.get(ing_id_str, {}).get("name", "Unknown")
+                    return await ctx.send(f"❌ วัตถุดิบไม่พอ! คุณขาด `{needed_name}`")
+
+            # 2. เช็กกระเป๋าเต็ม
+            capacity = player.get("capacity", 10)
+            if capacity != 0 and len(inv_list) >= capacity:
+                return await ctx.send("⚠️ กระเป๋าของคุณเต็ม!")
+
+            # 3. โอกาสล้มเหลว
+            if random.random() < fail_rate:
+                for ing_id, amount in recipe.items():
+                    ing_id_str = str(ing_id)
+                    for _ in range((amount + 1) // 2): # เสียครึ่งนึง
+                        if ing_id_str in inv_list: inv_list.remove(ing_id_str)
+                player_model.update_player_field(ctx.author.id, "inventory", json.dumps(inv_list))
+                return await ctx.send(f"💥 **ล้มเหลว ({int(fail_rate*100)}%)!** วัตถุดิบเสียหายไปบางส่วน!")
+
+            # 4. คราฟสำเร็จ
+            for ing_id, amount in recipe.items():
+                ing_id_str = str(ing_id)
+                for _ in range(amount):
+                    inv_list.remove(ing_id_str)
+                    
+            inv_list.append(str(item_id))
+            player_model.update_player_field(ctx.author.id, "inventory", json.dumps(inv_list))
+            
+            craft_name = ITEM_CONFIG[item_id]["name"]
+            await ctx.send(f"✨ คราฟสำเร็จ! คุณได้รับ `{craft_name}` 1 ชิ้น!")
+
+        except Exception as e:
+            # ส่วนนี้คือไม้ตาย! ถ้าโค้ดพังตรงไหน มันจะเด้งมาที่นี่
+            print(f"❌ [CRITICAL ERROR] การคราฟพัง! สาเหตุ: {e}")
+            traceback.print_exc() # แสดงบรรทัดที่พังใน Console
+            await ctx.send(f"⚠️ ระบบคราฟมีปัญหาทางเทคนิค! (Error: {str(e)})")
 
 # 🚨 ลบอันที่ซ้ำออกเหลือแค่อันเดียว
 async def setup(bot):
