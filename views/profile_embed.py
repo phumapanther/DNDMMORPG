@@ -62,8 +62,8 @@ WEAPON_STATS = {
 # ข้อมูลกระเป๋า
 BAG_STATS = {
     "Small_Bag": {"name": "🎒 กระเป๋าเล็ก", "capacity": 10},
-    "Medium_Bag": {"name": "🎒 กระเป๋ากลาง", "capacity": 20},
-    "Large_Bag": {"name": "🎒 กระเป๋าใหญ่", "capacity": 30},
+    "Medium_Bag": {"name": "🎒 กระเป๋ากลาง", "capacity": 50},
+    "Large_Bag": {"name": "🎒 กระเป๋าใหญ่", "capacity": 100},
     "Magic_Bag": {"name": "🎒 กระเป๋าเวทมนตร์", "capacity": 0}
 }
 
