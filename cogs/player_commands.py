@@ -219,6 +219,24 @@ class PlayerCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
+    @commands.command(name="bank")
+    async def check_bank(self, ctx):
+        # ดึงข้อมูลผู้เล่น
+        player = player_model.get_player(ctx.author.id)
+        bank_balance = player.get("bank", 0)
+        cash_balance = player.get("cash", 0) # แถมเช็กเงินสดให้ด้วยเลยเพื่อความสะดวก
+        
+        # สร้าง Embed สวยๆ
+        embed = discord.Embed(
+            title="🏦 บัญชีธนาคารของคุณ",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="💰 เงินสดติดตัว", value=f"`{cash_balance:,}` ทอง", inline=True)
+        embed.add_field(name="🏦 เงินในธนาคาร", value=f"`{bank_balance:,}` ทอง", inline=True)
+        embed.set_footer(text="ใช้คำสั่ง !deposit [จำนวน] เพื่อฝากเงิน (ถ้ามี)")
+        
+        await ctx.send(embed=embed)
+    
     # --- โค้ดคำสั่ง !bag ---
     @commands.command(name="bag")
     async def check_bag(self, ctx): # 🚨 จุดสำคัญ: เติม self ลงไปตรงนี้ครับ
