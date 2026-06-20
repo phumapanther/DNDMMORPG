@@ -679,7 +679,6 @@ class PlayerCommands(commands.Cog):
         w_atk_bonus = WEAPON_STATS.get(w_weapon, {}).get("atk", 0)
 
         l_armor = loser.get("armor", "None")
-        # ใช้ 20% ของ HP เกราะมาเป็นพลังป้องกันหักลบดาเมจ
         l_def_bonus = int(ARMOR_STATS.get(l_armor, {}).get("hp", 0) * 0.2)
 
         # สรุปความเสียหายรวม (ขั้นต่ำ 1 ดาเมจ)
@@ -688,21 +687,39 @@ class PlayerCommands(commands.Cog):
         # หักลบพลังชีวิตผู้แพ้
         loser_current_hp = loser.get("hp", 100)
         loser_new_hp = max(0, loser_current_hp - final_damage)
-        
         player_model.update_player_field(l_member.id, "hp", loser_new_hp)
 
         # 5. เช็กผลการตาย (HP เหลือ 0)
         death_status_text = ""
+        reward_text = "" # ตัวแปรสำหรับโชว์รางวัล
+
         if loser_new_hp <= 0:
             player_model.update_player_field(l_member.id, "current_state", "death")
             death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
+            
+            # --- 🏆 ระบบให้รางวัลผู้ชนะ ---
+            reward_exp = 100 + (loser.get("level", 1) * 20)  # พื้นฐาน 100 + เลเวลคู่ต่อสู้ * 20
+            reward_gold = 500 + (loser.get("level", 1) * 50) # พื้นฐาน 500 + เลเวลคู่ต่อสู้ * 50
+            
+            # อัปเดต EXP (พร้อมเช็กเลเวลอัป)
+            is_lvl_up, new_lvl, new_exp = player_model.add_exp(w_member.id, reward_exp)
+            
+            # อัปเดตทอง
+            new_winner_cash = winner.get("cash", 0) + reward_gold
+            player_model.update_player_field(w_member.id, "cash", new_winner_cash)
+            
+            # ข้อความรางวัล
+            lvl_up_msg = f"\n✨ **Level Up!** คุณเลเวลอัปเป็น {new_lvl}!" if is_lvl_up else ""
+            reward_text = f"\n💰 **ได้รับรางวัล:** `{reward_gold}` ทอง | `EXP +{reward_exp}`{lvl_up_msg}"
 
-        # ส่งข้อความสรุปผลการประลอง 1 เทิร์น
+        # ส่งข้อความสรุปผลการประลอง
         embed = discord.Embed(
             title="⚔️ ผลการดวลศัสตราวุธ ลานประลอง ⚔️",
             description=f"**{w_member.display_name}** ทอยได้ `{base_dmg}` แต้ม ชนะการประลองในตานี้!\n"
                         f"💥 สร้างความเสียหายใส่ **{l_member.display_name}** จำนวน `💥 {final_damage}` หน่วย\n"
-                        f"🩸 พลังชีวิตของ {l_member.display_name}: `{loser_current_hp}` ➔ `{loser_new_hp}`{death_status_text}",
+                        f"🩸 พลังชีวิตของ {l_member.display_name}: `{loser_current_hp}` ➔ `{loser_new_hp}`"
+                        f"{death_status_text}"
+                        f"{reward_text}",
             color=discord.Color.red()
         )
         await ctx.send(embed=embed)
