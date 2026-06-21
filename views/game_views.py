@@ -371,7 +371,7 @@ class MonsterEventView(View):
                     m_tier = getattr(self, "monster_rank", "Common")
                     dropped_item_id = None
                     
-                    if m_tier in ["Secret", "Unbeatable"] and random.random() <= 0.1:
+                    if m_tier in ["Secret", "Unbeatable"] and random.random() <= 0.01:
                         dropped_item_id = random.choice(["8", "21"])
                     elif random.random() <= 0.70:
                         if m_tier == "Common":
