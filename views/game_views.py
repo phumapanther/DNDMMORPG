@@ -72,10 +72,10 @@ EVENT_LIST = ["monster", "village", "treasure", "dungeon", "npc", "trap"]
 # โครงสร้างข้อมูลระดับความโหดของมอนสเตอร์
 MONSTER_RANKS = {
     "Common":      {"name": "🟢 มอนสเตอร์ทั่วไป (Common)",      "dice_count": 1, "hp_range": (40, 100),   "flee_chance": 85,  "gold_mult": 5,   "exp_reward": 25},
-    "Mini-Boss":   {"name": "🟡 มินิบอส (Mini-Boss)",          "dice_count": 2, "hp_range": (100, 500),  "flee_chance": 60,  "gold_mult": 12,  "exp_reward": 80},
-    "Main-Boss":   {"name": "🔴 บอสหลัก (Main-Boss)",          "dice_count": 3, "hp_range": (500, 1000), "flee_chance": 30,  "gold_mult": 30,  "exp_reward": 250},
-    "Secret":      {"name": "🟣 มอนสเตอร์ลับ (Secret)",          "dice_count": 2, "hp_range": (100, 1000), "flee_chance": 50,  "gold_mult": 25,  "exp_reward": 200},
-    "Unbeatable":  {"name": "💀 ไร้พ่าย (Unbeatable)",         "dice_count": 5, "hp_range": (1000, 2000), "flee_chance": 5,   "gold_mult": 100, "exp_reward": 1000}
+    "Mini-Boss":   {"name": "🟡 มินิบอส (Mini-Boss)",          "dice_count": 2, "hp_range": (100, 500),  "flee_chance": 60,  "gold_mult": 10,  "exp_reward": 50},
+    "Main-Boss":   {"name": "🔴 บอสหลัก (Main-Boss)",          "dice_count": 3, "hp_range": (500, 1000), "flee_chance": 30,  "gold_mult": 15,  "exp_reward": 250},
+    "Secret":      {"name": "🟣 มอนสเตอร์ลับ (Secret)",          "dice_count": 2, "hp_range": (100, 1000), "flee_chance": 50,  "gold_mult": 15,  "exp_reward": 250},
+    "Unbeatable":  {"name": "💀 ไร้พ่าย (Unbeatable)",         "dice_count": 5, "hp_range": (1000, 2000), "flee_chance": 5,   "gold_mult": 1000, "exp_reward": 1000}
 }
 
 
@@ -175,389 +175,375 @@ class MonsterEventView(View):
         return True
 
     async def process_turn(self, interaction: discord.Interaction, skill_used=None):
-        player = player_model.get_player(self.user_id)
-        p_lvl = player.get("level", 1)
-        
-        # 1. 🛡️ ดึงข้อมูลอุปกรณ์
-        w_id = player.get("weapon", "Wooden_Weapon")
-        a_id = player.get("armor", "None")
-        w_stat = WEAPON_STATS.get(w_id, WEAPON_STATS["Wooden_Weapon"])
-        a_stat = ARMOR_STATS.get(a_id, ARMOR_STATS["None"])
-        
-        # 2. 🛡️ คำนวณพลังโจมตี (ถ้าความทนทานเป็น 0 พลังโจมตีหาย)
-        curr_atk = w_stat["atk"] if player.get("weapon_dur", 0) > 0 else 0
-        
-        # 3. 🛠️ กำหนดค่าความทนทานเริ่มต้นเป็น 0 เพื่อป้องกันบั๊ก
-        durability_lost_w = 3 if skill_used else 1 
-        damage_to_armor = 0 
-        
-        player_roll = random.randint(1, 20)
-        monster_roll = sum(random.randint(1, 20) for _ in range(self.m_stats["dice_count"]))
-        
-        skill_log = ""
-        combat_log = ""
-        db_updates = {}
-        
-        enrage_bonus = 0
-        if self.turn_count > 3:
-            rank_danger = {"Common": 2, "Mini-Boss": 5, "Main-Boss": 10, "Secret": 8, "Unbeatable": 25}
-            enrage_bonus = (self.turn_count - 3) * rank_danger.get(self.monster_rank, 2)
-            skill_log += f"😡 **{self.m_stats['name']} กำลังคลั่ง!** บอสสะสมความโกรธเพิ่มพลังโจมตีเด็ดขาด `+{enrage_bonus}` หน่วยในเทิร์นนี้!\n"
+        try:
+            player = player_model.get_player(self.user_id)
+            if not player:
+                return await interaction.response.send_message("❌ ไม่พบข้อมูลตัวละครของคุณในระบบ!", ephemeral=True)
 
-        damage_multiplier = 1
-
-        # ─── ⚔️ ระบบคำนวณสกิลช่วงต้นเทิร์น (ดึงลอจิกสเกลจาก Config 100%) ───
-        if skill_used == "skill_heavy_strike":
-            w_cfg = SKILL_CONFIG["Warrior"]["heavy_strike"]
-            chance = w_cfg["chance_base"] + (p_lvl * w_cfg["chance_lvl_scale"])
-            if random.randint(1, 100) <= chance:
-                damage_multiplier = w_cfg["damage_multiplier"]
-                skill_log += f"✨ **Heavy Strike สำเร็จ!** การโจมตีในเทิร์นนี้จะแรงขึ้น {damage_multiplier} เท่า!\n"
-            else:
-                skill_log += "💨 **Heavy Strike ล้มเหลว!** ทอยเต๋าพลาดสมาธิหลุด\n"
-
-        elif skill_used == "skill_evasion":
-            r_cfg = SKILL_CONFIG["Rogue"]["evasion"]
-            chance = r_cfg["chance_base"] + (p_lvl * r_cfg["chance_lvl_scale"])
-            if random.randint(1, 100) <= chance:
-                player_model.update_player_field(self.user_id, "current_state", "idle")
-                await interaction.response.edit_message(content=f"💨 **Evasion สำเร็จ!** คุณม้วนตัวหนีออกจากสู้กับ **{self.m_stats['name']}** ได้สำเร็จ!", view=AdventureView(author_id=self.user_id))
-                return
-            else:
-                skill_log += "⚠️ **Evasion ล้มเหลว!** มอนสเตอร์ดักทางเท้าไว้ได้\n"
-
-        elif skill_used == "skill_heal":
-            c_cfg = SKILL_CONFIG["Cleric"]["heal"]
-            heal_percent = c_cfg["heal_percent_base"] + (p_lvl * c_cfg["heal_lvl_scale"])
-            heal_amount = int(player["max_hp"] * heal_percent)
+            p_lvl = player.get("level", 1)
             
-            if self.monster_rank in ["Main-Boss", "Unbeatable"]:
-                stolen_heal = int(heal_amount * 0.3)
-                heal_amount -= stolen_heal
-                self.monster_hp = min(self.m_stats["hp_range"][1], self.monster_hp + stolen_heal)
-                skill_log += f"💔 **คำสาปบอสทำงาน!** บอสสูบกลืนแสงฮีลของคุณไป `+{stolen_heal}` HP! "
+            # 1. 🛡️ ดึงข้อมูลอุปกรณ์
+            w_id = player.get("weapon", "Wooden_Weapon")
+            a_id = player.get("armor", "None")
+            w_stat = WEAPON_STATS.get(w_id, WEAPON_STATS.get("Wooden_Weapon", {"atk": 1}))
+            a_stat = ARMOR_STATS.get(a_id, ARMOR_STATS.get("None", {"hp": 0}))
             
-            new_hp = min(player["max_hp"], player["hp"] + heal_amount)
-            player["hp"] = new_hp 
-            skill_log += f"✨ **Heal!** พลังชีวิตของคุณฟื้นฟู `+ {heal_amount}` หน่วย (❤️ HP: {new_hp})\n"
-
-        # แจกสถานะเทิร์นบัฟอิงตามระยะเวลาใน Config
-        if skill_used == "skill_shield_bash": 
-            self.active_buffs["shield_bash"] = SKILL_CONFIG["Warrior"]["shield_bash"]["duration"]
-        elif skill_used == "skill_fireball": 
-            self.active_buffs["fireball"] = SKILL_CONFIG["Mage"]["fireball"]["duration"]
-        elif skill_used == "skill_frostbolt": 
-            f_cfg = SKILL_CONFIG["Mage"]["frostbolt"]
-            self.active_buffs["frostbolt"] = f_cfg["duration_base"] + int(p_lvl * f_cfg["duration_lvl_scale"])
-        elif skill_used == "skill_holy_aura": 
-            self.active_buffs["holy_aura"] = 3
-        elif skill_used == "skill_backstab":
-            r_b_cfg = SKILL_CONFIG["Rogue"]["backstab"]
-            if random.randint(1, 100) <= (r_b_cfg["chance_base"] + (p_lvl * r_b_cfg["chance_lvl_scale"])): 
-                self.active_buffs["backstab"] = 1
-
-        # 🔥 คิดเอฟเฟกต์เผาไหม้ของ Fireball
-        if self.active_buffs.get("fireball", 0) > 0:
-            m_cfg = SKILL_CONFIG["Mage"]["fireball"]
-            burn_percent = m_cfg["burn_base"] + (p_lvl * m_cfg["burn_lvl_scale"])
-            burn_damage = int(self.m_stats["hp_range"][1] * burn_percent)
-            self.monster_hp = max(0, self.monster_hp - burn_damage)
-            combat_log += f"🔥 *เอฟเฟกต์เผาไหม้:* บอสโดนไฟบอลเผาเสีย HP `- {burn_damage}` หน่วย (บอสเหลือ HP: {self.monster_hp})\n"
-            self.active_buffs["fireball"] -= 1
-
-        # ⚔ คุณทอยได้เต๋าชนะบอส
-        if player_roll >= monster_roll:
-            damage_to_monster = int((player_roll + curr_atk) * 5 * damage_multiplier)
-            self.monster_hp = max(0, self.monster_hp - damage_to_monster)
-            combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}/บอส({monster_roll})** (+{curr_atk} ดาบ) สร้างความเสียหายใส่บอส `- {damage_to_monster}` หน่วย\n"
-        
-        # 👾 บอสทอยได้เต๋าชนะ
-        else:
-            damage_to_player = random.randint(10, 25) + enrage_bonus
+            # 2. 🛡️ คำนวณพลังโจมตี (ถ้าความทนทานเป็น 0 พลังโจมตีหาย)
+            curr_atk = w_stat.get("atk", 0) if player.get("weapon_dur", 0) > 0 else 0
             
-            # 5. 🛡️ [จุดที่ต้องเพิ่ม] เกราะลดตามความแรงของมอนสเตอร์ (หาร 10)
-            # คำนวณความเสียหายเกราะ (ถ้ามีเกราะและยังไม่พัง)
-            if player.get("armor_dur", 0) > 0:
-                damage_to_armor = max(1, int(damage_to_player / 10))
-                # เกราะช่วยลดดาเมจ (ตัวเลือกเสริม: ลดดาเมจให้ผู้เล่น 20%)
-                reduction = int(damage_to_player * 0.2)
-                damage_to_player -= reduction
-                combat_log += f"🛡️ เกราะรับดาเมจแทนคุณ `- {reduction}` หน่วย!\n"
+            # 3. 🛠️ กำหนดค่าความทนทานเริ่มต้นเป็น 0 เพื่อป้องกันบั๊ก
+            durability_lost_w = 3 if skill_used else 1 
+            damage_to_armor = 0 
             
-            # ❄ สเตตัส Frostbolt
-            if self.active_buffs.get("frostbolt", 0) > 0:
-                f_reduce = SKILL_CONFIG["Mage"]["frostbolt"]["damage_reduce"]
-                damage_to_player = int(damage_to_player * (1 - f_reduce))
-                combat_log += f"❄️ *น้ำแข็งเกาะ:* บอสติดแช่แข็ง พลังโจมตีลดลง {int(f_reduce*100)}%! (โดนดาเมจเบา ๆ `- {damage_to_player}`)\n"
-                
-            elif self.active_buffs.get("holy_aura", 0) > 0 and random.randint(1, 100) <= (SKILL_CONFIG["Cleric"]["holy_aura"]["chance_base"] + (p_lvl * SKILL_CONFIG["Cleric"]["holy_aura"]["chance_lvl_scale"])):
-                damage_to_player = 0
-                combat_log += "✨ *Holy Aura ทำงาน:* ร่างกายส่องแสงบล็อคพลังโจมตีของบอสกลายเป็น 0!\n"
-                
-            # 🗡 สเตตัส Backstab (บัฟโรกคริสะท้อน)
-            elif self.active_buffs.get("backstab", 0) > 0:
-                damage_to_player = int(damage_to_player * 0.2)
-                rogue_reflect = int(player_roll * 5 * SKILL_CONFIG["Rogue"]["backstab"]["damage_reflect_mult"])
-                self.monster_hp = max(0, self.monster_hp - rogue_reflect)
-                combat_log += f"🗡️ *Backstab คุมเชิง:* ดาเมจสวนกลับลดลง 80% (โดนแค่ `- {damage_to_player}`) พร้อมวาร์ปตลบหลังแทงบอสสวนกลับหงายหลังฟาด `- {rogue_reflect}` หน่วย! (บอสเหลือ HP: {self.monster_hp})\n"
-                
-            elif self.active_buffs.get("shield_bash", 0) > 0:
-                s_b_cfg = SKILL_CONFIG["Warrior"]["shield_bash"]
-                reduction = s_b_cfg["reduction_base"] + (p_lvl * s_b_cfg["reduction_lvl_scale"])
-                damage_to_player = int(damage_to_player * (1 - min(0.9, reduction)))
-                combat_log += f"🛡️ *Shield Bash บล็อก:* ดาเมจลดลงครอบคลุมเกราะ (โดนแค่ `- {damage_to_player}`)\n"
-
-            if damage_to_player > 0:
-                player["hp"] = max(0, player["hp"] - damage_to_player)
-                combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}/บอส({monster_roll})** 💥 บอสโจมตีสวน! เสีย HP `- {damage_to_player}` (เกราะเสื่อมสภาพ `- {damage_to_armor}`)\n"
-
-       # 6. 💾 คำนวณค่าทนทานใหม่ (ถ้าไม่มีการโจมตีสวน ค่า damage_to_armor ก็จะเป็น 0)
-        new_w_dur = max(0, player.get("weapon_dur", 0) - durability_lost_w)
-        new_a_dur = max(0, player.get("armor_dur", 0) - damage_to_armor)
-
-        db_updates["weapon_dur"] = new_w_dur
-        db_updates["armor_dur"] = new_a_dur
-        db_updates["hp"] = player["hp"]
-
-        # 7. 🚨 แจ้งเตือนของพัง
-        if new_w_dur == 0 and player.get("weapon_dur", 0) > 0:
-            combat_log += "🚨 **อาวุธของคุณพังแตกหัก!**\n"
-        if new_a_dur == 0 and player.get("armor_dur", 0) > 0:
-            combat_log += "🚨 **ชุดเกราะของคุณพังยับเยิน!**\n"
-
-        # หักเทิร์นสถานะบัฟ
-        if self.active_buffs.get("frostbolt", 0) > 0: self.active_buffs["frostbolt"] -= 1
-        if self.active_buffs.get("holy_aura", 0) > 0: self.active_buffs["holy_aura"] -= 1
-        if self.active_buffs.get("shield_bash", 0) > 0: self.active_buffs["shield_bash"] -= 1
-        if self.active_buffs.get("backstab", 0) > 0: self.active_buffs["backstab"] -= 1
-
-        db_updates["hp"] = player["hp"]
-
-        # [ลอจิกแพ้ชนะ เช็กเลเวลอัปคงเดิมตามโค้ดของคุณอาเธอร์...]
-        if self.monster_hp <= 0:
-            # ชนะมอน
-            reward = random.randint(30, 70) * self.m_stats["gold_mult"]
-            gained_exp = self.m_stats["exp_reward"] + random.randint(5, 15)
+            player_roll = random.randint(1, 20)
+            monster_roll = sum(random.randint(1, 20) for _ in range(self.m_stats.get("dice_count", 1)))
             
-            # เตรียม Dictionary สำหรับอัปเดตข้อมูล
+            skill_log = ""
+            combat_log = ""
             db_updates = {}
-            db_updates["cash"] = player.get("cash", 0) + reward
-            db_updates["sanity"] = player.get("sanity", 100) + 1
-            db_updates["last_event"] = "monster"
-            db_updates["current_state"] = "idle"
             
-            # -----------------------------------------------------------------
-            # 🎁 ระบบสุ่มดรอปไอเทม (เช็กกระเป๋าเต็ม + แนะนำวิธีแก้)
-            # -----------------------------------------------------------------
-            dropped_item_msg = ""
-            dropped_item_id = None
-            
+            enrage_bonus = 0
+            if self.turn_count > 3:
+                rank_danger = {"Common": 2, "Mini-Boss": 5, "Main-Boss": 10, "Secret": 8, "Unbeatable": 25}
+                enrage_bonus = (self.turn_count - 3) * rank_danger.get(self.monster_rank, 2)
+                skill_log += f"😡 **{self.m_stats.get('name', 'บอส')} กำลังคลั่ง!** บอสสะสมความโกรธเพิ่มพลังโจมตีเด็ดขาด `+{enrage_bonus}` หน่วยในเทิร์นนี้!\n"
+
+            damage_multiplier = 1
+
+            # ─── ⚔️ ระบบคำนวณสกิลช่วงต้นเทิร์น ───
             try:
-                # 1. ดึงข้อมูลสดๆ จากฐานข้อมูล
-                fresh_player = player_model.get_player(self.user_id)
-                raw_inv = fresh_player.get("inventory", "[]")
-                
-                # แปลงให้เป็น List ที่ใช้งานได้แน่นอน
-                if isinstance(raw_inv, str):
-                    try:
-                        import json
-                        parsed_inv = json.loads(raw_inv)
-                        # 🛠️ ดักจับบั๊ก: ถ้าแปลออกมาแล้วเป็นตัวเลข (int) ให้จับยัดลง List
-                        if isinstance(parsed_inv, list):
-                            inv_list = parsed_inv
-                        else:
-                            inv_list = [str(parsed_inv)] 
-                    except:
-                        # กรณีที่โหลด JSON ไม่ได้ ให้ใช้ split แบ่งด้วยคอมม่า
-                        inv_list = raw_inv.split(",") if "," in raw_inv else ([raw_inv] if raw_inv and raw_inv not in ["None", "null", ""] else [])
-                
-                # 🛠️ แก้ Typo จากของเดิมที่เป็น isinstance(inv_list, list) 
-                elif isinstance(raw_inv, list):
-                    inv_list = raw_inv
-                else:
-                    inv_list = []
-                
-                # กรองค่าว่างทิ้ง (เพื่อความชัวร์)
-                inv_list = [str(i).strip() for i in inv_list if str(i).strip() and str(i).strip() not in ["None", "null", "[]"]]
-
-                # 2. สุ่มดรอปไอเทม
-                m_tier = getattr(self, "monster_rank", "Common")
-                if m_tier in ["Secret", "Unbeatable"] and random.random() <= 0.1:
-                    dropped_item_id = random.choice(["8", "21"])
-                elif random.random() <= 0.70:
-                    if m_tier == "Common":
-                        drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18"]
+                if skill_used == "skill_heavy_strike":
+                    w_cfg = SKILL_CONFIG["Warrior"]["heavy_strike"]
+                    chance = w_cfg["chance_base"] + (p_lvl * w_cfg["chance_lvl_scale"])
+                    if random.randint(1, 100) <= chance:
+                        damage_multiplier = w_cfg["damage_multiplier"]
+                        skill_log += f"✨ **Heavy Strike สำเร็จ!** การโจมตีในเทิร์นนี้จะแรงขึ้น {damage_multiplier} เท่า!\n"
                     else:
-                        drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", 
-                                     "22", "23", "24", "25", "26", "27", "28", "3", "4", "5", "6", "7"]
-                    weights = [100000 / ITEM_CONFIG.get(i, {}).get("buy", 100) for i in drop_pool]
-                    dropped_item_id = random.choices(drop_pool, weights=weights, k=1)[0]
+                        skill_log += "💨 **Heavy Strike ล้มเหลว!** ทอยเต๋าพลาดสมาธิหลุด\n"
 
-                # 3. ตรวจสอบกระเป๋า (เพิ่มเงื่อนไข capacity == 0)
-                if dropped_item_id:
-                    dropped_item_name = ITEM_CONFIG.get(dropped_item_id, {}).get("name", "ไอเทมปริศนา")
-                    capacity = fresh_player.get("capacity", 10)
-                    current_count = len(inv_list)
+                elif skill_used == "skill_evasion":
+                    r_cfg = SKILL_CONFIG["Rogue"]["evasion"]
+                    chance = r_cfg["chance_base"] + (p_lvl * r_cfg["chance_lvl_scale"])
+                    if random.randint(1, 100) <= chance:
+                        player_model.update_player_field(self.user_id, "current_state", "idle")
+                        await interaction.response.edit_message(content=f"💨 **Evasion สำเร็จ!** คุณม้วนตัวหนีออกจากสู้กับ **{self.m_stats.get('name', 'มอนสเตอร์')}** ได้สำเร็จ!", view=AdventureView(author_id=self.user_id))
+                        return
+                    else:
+                        skill_log += "⚠️ **Evasion ล้มเหลว!** มอนสเตอร์ดักทางเท้าไว้ได้\n"
+
+                elif skill_used == "skill_heal":
+                    c_cfg = SKILL_CONFIG["Cleric"]["heal"]
+                    heal_percent = c_cfg["heal_percent_base"] + (p_lvl * c_cfg["heal_lvl_scale"])
+                    heal_amount = int(player.get("max_hp", 100) * heal_percent)
                     
-                    # ถ้า capacity เป็น 0 จะเป็น True เสมอ (ไม่จำกัด) หรือถ้าไม่ถึงขีดจำกัดก็จะ True
-                    if capacity == 0 or current_count < capacity:
-                        # กระเป๋ายังว่างหรือไม่จำกัด
-                        inv_list.append(str(dropped_item_id))
-                        import json
-                        db_updates["inventory"] = json.dumps(inv_list)
-                        
-                        # สร้างข้อความแสดงความจุ
-                        if capacity == 0:
-                            capacity_display = "(Unlimited)"
-                        else:
-                            capacity_display = f"({current_count + 1}/{capacity})"
-                        
-                        if dropped_item_id in ["8", "21"]:
-                            dropped_item_msg = f"\n🌟 **[ULTRA RARE DROP!]** พระเจ้ายิ้มรับ! คุณได้รับ `{dropped_item_name}` 1 ชิ้น!"
-                        else:
-                            dropped_item_msg = f"\n📦 **ดรอปไอเทม:** ได้รับ `{dropped_item_name}` 1 ชิ้น! {capacity_display}"
-                            
-                        # print(f"✅ [DEBUG] ผู้เล่น {self.user_id} ได้รับไอเทม: {dropped_item_name}")
-                    else:
-                        # กระเป๋าเต็ม!
-                        dropped_item_msg = (
-                            f"\n⚠️ **กระเป๋าเต็ม!** มอนสเตอร์ดรอป `{dropped_item_name}` "
-                            f"แต่กระเป๋าของคุณเต็ม ({current_count}/{capacity})\n"
-                            f"👉 **วิธีแก้:** พิมพ์ `!drop` เพื่อทิ้งของเก่า หรือไปขายของที่ร้านค้าในเมือง!"
-                        )
-                        # print(f"⚠️ [DEBUG] กระเป๋าผู้เล่น {self.user_id} เต็ม! ไอเทม {dropped_item_name} ถูกทิ้ง")
+                    if self.monster_rank in ["Main-Boss", "Unbeatable"]:
+                        stolen_heal = int(heal_amount * 0.3)
+                        heal_amount -= stolen_heal
+                        self.monster_hp = min(self.m_stats.get("hp_range", [0,100])[1], self.monster_hp + stolen_heal)
+                        skill_log += f"💔 **คำสาปบอสทำงาน!** บอสสูบกลืนแสงฮีลของคุณไป `+{stolen_heal}` HP! "
+                    
+                    new_hp = min(player.get("max_hp", 100), player.get("hp", 100) + heal_amount)
+                    player["hp"] = new_hp 
+                    skill_log += f"✨ **Heal!** พลังชีวิตของคุณฟื้นฟู `+ {heal_amount}` หน่วย (❤️ HP: {new_hp})\n"
 
-            except Exception as e:
-                print(f"❌ [ERROR] ระบบดรอปไอเทมพัง: {e}")
-                import traceback
-                traceback.print_exc()
-            # -----------------------------------------------------------------
+                if skill_used == "skill_shield_bash": 
+                    self.active_buffs["shield_bash"] = SKILL_CONFIG["Warrior"]["shield_bash"]["duration"]
+                elif skill_used == "skill_fireball": 
+                    self.active_buffs["fireball"] = SKILL_CONFIG["Mage"]["fireball"]["duration"]
+                elif skill_used == "skill_frostbolt": 
+                    f_cfg = SKILL_CONFIG["Mage"]["frostbolt"]
+                    self.active_buffs["frostbolt"] = f_cfg["duration_base"] + int(p_lvl * f_cfg["duration_lvl_scale"])
+                elif skill_used == "skill_holy_aura": 
+                    self.active_buffs["holy_aura"] = 3
+                elif skill_used == "skill_backstab":
+                    r_b_cfg = SKILL_CONFIG["Rogue"]["backstab"]
+                    if random.randint(1, 100) <= (r_b_cfg["chance_base"] + (p_lvl * r_b_cfg["chance_lvl_scale"])): 
+                        self.active_buffs["backstab"] = 1
+            except KeyError as e:
+                print(f"⚠️ [WARNING] ตั้งค่าสกิลขาดหาย: {e}")
 
-            # -----------------------------------------------------------------
-            # 📈 ระบบคำนวณ EXP และ Level Up
-            # -----------------------------------------------------------------
-            if player.get("current_state") == "dungeon_choice" or player.get("dungeon_steps", 0) > 0:
-                next_view = AdventureView(author_id=self.user_id) 
-                battle_end_log = f"\n⚔️ มอนสเตอร์ในชั้นนี้ถูกกำจัดแล้ว! เตรียมตัวเดินทางลึกเข้าไปในดันเจี้ยนขั้นถัดไป..."
+            # 🔥 คิดเอฟเฟกต์เผาไหม้ของ Fireball
+            if self.active_buffs.get("fireball", 0) > 0:
+                try:
+                    m_cfg = SKILL_CONFIG["Mage"]["fireball"]
+                    burn_percent = m_cfg["burn_base"] + (p_lvl * m_cfg["burn_lvl_scale"])
+                    burn_damage = int(self.m_stats.get("hp_range", [0,100])[1] * burn_percent)
+                    self.monster_hp = max(0, self.monster_hp - burn_damage)
+                    combat_log += f"🔥 *เอฟเฟกต์เผาไหม้:* บอสโดนไฟบอลเผาเสีย HP `- {burn_damage}` หน่วย (บอสเหลือ HP: {self.monster_hp})\n"
+                    self.active_buffs["fireball"] -= 1
+                except Exception as e: pass
+
+            # ⚔ คุณทอยได้เต๋าชนะบอส
+            if player_roll >= monster_roll:
+                damage_to_monster = int((player_roll + curr_atk) * 5 * damage_multiplier)
+                self.monster_hp = max(0, self.monster_hp - damage_to_monster)
+                combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}/บอส({monster_roll})** (+{curr_atk} ดาบ) สร้างความเสียหายใส่บอส `- {damage_to_monster}` หน่วย\n"
+            
+            # 👾 บอสทอยได้เต๋าชนะ
             else:
-                next_view = AdventureView(author_id=self.user_id)
-                battle_end_log = ""
+                damage_to_player = random.randint(10, 25) + enrage_bonus
+                
+                if player.get("armor_dur", 0) > 0:
+                    damage_to_armor = max(1, int(damage_to_player / 10))
+                    reduction = int(damage_to_player * 0.2)
+                    damage_to_player -= reduction
+                    combat_log += f"🛡️ เกราะรับดาเมจแทนคุณ `- {reduction}` หน่วย!\n"
+                
+                try:
+                    if self.active_buffs.get("frostbolt", 0) > 0:
+                        f_reduce = SKILL_CONFIG["Mage"]["frostbolt"]["damage_reduce"]
+                        damage_to_player = int(damage_to_player * (1 - f_reduce))
+                        combat_log += f"❄️ *น้ำแข็งเกาะ:* บอสติดแช่แข็ง พลังโจมตีลดลง {int(f_reduce*100)}%! (โดนดาเมจเบา ๆ `- {damage_to_player}`)\n"
+                        
+                    elif self.active_buffs.get("holy_aura", 0) > 0 and random.randint(1, 100) <= (SKILL_CONFIG["Cleric"]["holy_aura"]["chance_base"] + (p_lvl * SKILL_CONFIG["Cleric"]["holy_aura"]["chance_lvl_scale"])):
+                        damage_to_player = 0
+                        combat_log += "✨ *Holy Aura ทำงาน:* ร่างกายส่องแสงบล็อคพลังโจมตีของบอสกลายเป็น 0!\n"
+                        
+                    elif self.active_buffs.get("backstab", 0) > 0:
+                        damage_to_player = int(damage_to_player * 0.2)
+                        rogue_reflect = int(player_roll * 5 * SKILL_CONFIG["Rogue"]["backstab"]["damage_reflect_mult"])
+                        self.monster_hp = max(0, self.monster_hp - rogue_reflect)
+                        combat_log += f"🗡️ *Backstab คุมเชิง:* ดาเมจสวนกลับลดลง 80% (โดนแค่ `- {damage_to_player}`) พร้อมวาร์ปตลบหลังแทงบอสสวนกลับหงายหลังฟาด `- {rogue_reflect}` หน่วย! (บอสเหลือ HP: {self.monster_hp})\n"
+                        
+                    elif self.active_buffs.get("shield_bash", 0) > 0:
+                        s_b_cfg = SKILL_CONFIG["Warrior"]["shield_bash"]
+                        reduction = s_b_cfg["reduction_base"] + (p_lvl * s_b_cfg["reduction_lvl_scale"])
+                        damage_to_player = int(damage_to_player * (1 - min(0.9, reduction)))
+                        combat_log += f"🛡️ *Shield Bash บล็อก:* ดาเมจลดลงครอบคลุมเกราะ (โดนแค่ `- {damage_to_player}`)\n"
+                except Exception: pass
 
-            try:
+                if damage_to_player > 0:
+                    player["hp"] = max(0, player.get("hp", 100) - damage_to_player)
+                    combat_log += f"⚔️ คุณทอยได้ **🎲 {player_roll}/บอส({monster_roll})** 💥 บอสโจมตีสวน! เสีย HP `- {damage_to_player}` (เกราะเสื่อมสภาพ `- {damage_to_armor}`)\n"
+
+            # 6. 💾 คำนวณค่าทนทานใหม่
+            new_w_dur = max(0, player.get("weapon_dur", 0) - durability_lost_w)
+            new_a_dur = max(0, player.get("armor_dur", 0) - damage_to_armor)
+
+            db_updates["weapon_dur"] = new_w_dur
+            db_updates["armor_dur"] = new_a_dur
+            db_updates["hp"] = player.get("hp", 100)
+
+            # 7. 🚨 แจ้งเตือนของพัง
+            if new_w_dur == 0 and player.get("weapon_dur", 0) > 0:
+                combat_log += "🚨 **อาวุธของคุณพังแตกหัก!**\n"
+            if new_a_dur == 0 and player.get("armor_dur", 0) > 0:
+                combat_log += "🚨 **ชุดเกราะของคุณพังยับเยิน!**\n"
+
+            # หักเทิร์นสถานะบัฟ
+            if self.active_buffs.get("frostbolt", 0) > 0: self.active_buffs["frostbolt"] -= 1
+            if self.active_buffs.get("holy_aura", 0) > 0: self.active_buffs["holy_aura"] -= 1
+            if self.active_buffs.get("shield_bash", 0) > 0: self.active_buffs["shield_bash"] -= 1
+            if self.active_buffs.get("backstab", 0) > 0: self.active_buffs["backstab"] -= 1
+
+            # =================================================================
+            # 🏆 กรณี: ผู้เล่นชนะ (บอสตาย)
+            # =================================================================
+            if self.monster_hp <= 0:
+                reward = int(random.randint(30, 70) * self.m_stats.get("gold_mult", 1.0))
+                gained_exp = self.m_stats.get("exp_reward", 10) + random.randint(5, 15)
+                
+                db_updates["cash"] = player.get("cash", 0) + reward
+                db_updates["sanity"] = player.get("sanity", 100) + 1
+                db_updates["last_event"] = "monster"
+                db_updates["current_state"] = "idle"
+                
+                dropped_item_msg = ""
+                try:
+                    fresh_player = player_model.get_player(self.user_id)
+                    raw_inv = fresh_player.get("inventory", "[]")
+                    
+                    if isinstance(raw_inv, str):
+                        try:
+                            import json
+                            parsed_inv = json.loads(raw_inv)
+                            if isinstance(parsed_inv, list): inv_list = parsed_inv
+                            else: inv_list = [str(parsed_inv)] 
+                        except:
+                            inv_list = raw_inv.split(",") if "," in raw_inv else ([raw_inv] if raw_inv and raw_inv not in ["None", "null", ""] else [])
+                    elif isinstance(raw_inv, list):
+                        inv_list = raw_inv
+                    else:
+                        inv_list = []
+                    
+                    inv_list = [str(i).strip() for i in inv_list if str(i).strip() and str(i).strip() not in ["None", "null", "[]"]]
+
+                    m_tier = getattr(self, "monster_rank", "Common")
+                    dropped_item_id = None
+                    
+                    if m_tier in ["Secret", "Unbeatable"] and random.random() <= 0.1:
+                        dropped_item_id = random.choice(["8", "21"])
+                    elif random.random() <= 0.70:
+                        if m_tier == "Common":
+                            drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18"]
+                        else:
+                            drop_pool = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", 
+                                         "22", "23", "24", "25", "26", "27", "28", "3", "4", "5", "6", "7"]
+                        weights = [100000 / ITEM_CONFIG.get(i, {}).get("buy", 100) for i in drop_pool]
+                        dropped_item_id = random.choices(drop_pool, weights=weights, k=1)[0]
+
+                    if dropped_item_id:
+                        dropped_item_name = ITEM_CONFIG.get(dropped_item_id, {}).get("name", "ไอเทมปริศนา")
+                        capacity = fresh_player.get("capacity", 10)
+                        current_count = len(inv_list)
+                        
+                        if capacity == 0 or current_count < capacity:
+                            inv_list.append(str(dropped_item_id))
+                            import json
+                            db_updates["inventory"] = json.dumps(inv_list)
+                            
+                            capacity_display = "(Unlimited)" if capacity == 0 else f"({current_count + 1}/{capacity})"
+                            
+                            if dropped_item_id in ["8", "21"]:
+                                dropped_item_msg = f"\n🌟 **[ULTRA RARE DROP!]** พระเจ้ายิ้มรับ! คุณได้รับ `{dropped_item_name}` 1 ชิ้น!"
+                            else:
+                                dropped_item_msg = f"\n📦 **ดรอปไอเทม:** ได้รับ `{dropped_item_name}` 1 ชิ้น! {capacity_display}"
+                        else:
+                            dropped_item_msg = (
+                                f"\n⚠️ **กระเป๋าเต็ม!** มอนสเตอร์ดรอป `{dropped_item_name}` "
+                                f"แต่กระเป๋าของคุณเต็ม ({current_count}/{capacity})\n"
+                                f"👉 **วิธีแก้:** พิมพ์ `!drop` เพื่อทิ้งของเก่า หรือไปขายของที่ร้านค้าในเมือง!"
+                            )
+
+                except Exception as e:
+                    print(f"❌ [ERROR] ระบบดรอปไอเทมพัง: {e}")
+
+                if player.get("current_state") == "dungeon_choice" or player.get("dungeon_steps", 0) > 0:
+                    next_view = AdventureView(author_id=self.user_id) 
+                    battle_end_log = f"\n⚔️ มอนสเตอร์ในชั้นนี้ถูกกำจัดแล้ว! เตรียมตัวเดินทางลึกเข้าไปในดันเจี้ยนขั้นถัดไป..."
+                else:
+                    next_view = AdventureView(author_id=self.user_id)
+                    battle_end_log = ""
+
                 current_exp = player.get("exp", 0) + gained_exp
                 current_level = player.get("level", 1)
                 max_hp = player.get("max_hp", 100)
                 is_lv_up = False
                 
-                # ดัก Infinite Loop เผื่อเกิดข้อผิดพลาดในการคำนวณ
-                loop_failsafe = 0 
-                while loop_failsafe < 100:
-                    loop_failsafe += 1
-                    if current_level >= 100:
-                        current_exp = 0
-                        break
-                    
-                    required_exp = (current_level ** 2) * 70
-                    if current_exp >= required_exp:
-                        current_exp -= required_exp
-                        current_level += 1
-                        max_hp += 20
-                        is_lv_up = True
-                    else:
-                        break
-                
-                db_updates["exp"] = current_exp
-                db_updates["level"] = current_level
-                if is_lv_up:
-                    db_updates["max_hp"] = max_hp
-                    db_updates["hp"] = max_hp 
-                    print(f"🎉 [DEBUG] ผู้เล่น {self.user_id} เลเวลอัปเป็น Lv.{current_level}!")
-            
-            except Exception as e:
-                print(f"❌ [ERROR] ระบบคำนวณ EXP พัง: {e}")
-                traceback.print_exc()
-
-            # -----------------------------------------------------------------
-            # 🎖️ ระบบอัปเดตยศและเซฟลงฐานข้อมูล
-            # -----------------------------------------------------------------
-            try:
-                rank_msg = ""
-                old_rank = player.get("rank", "F")
-                current_level = db_updates.get("level", player.get("level", 1)) # ใช้ค่าใหม่ล่าสุด
-                
-                if current_level >= 100: new_rank = "SSS"
-                elif current_level >= 80: new_rank = "A"
-                elif current_level >= 50: new_rank = "B"
-                elif current_level >= 20: new_rank = "C"
-                elif current_level >= 10: new_rank = "D"
-                elif current_level >= 5: new_rank = "E"
-                else: new_rank = "F"
-                
-                if old_rank != new_rank:
-                    db_updates["rank"] = new_rank
-                
-                # อัปเดตข้อมูลทั้งหมดลงฐานข้อมูลในครั้งเดียว
-                player_model.update_player_fields(self.user_id, db_updates)
-                
-                # ถ้าแรงค์เปลี่ยน ค่อยไปขอดิสคอร์ดเปลี่ยนยศ
-                if old_rank != new_rank:
-                    guild = interaction.guild
-                    member = interaction.user
-                    if guild and isinstance(member, discord.Member):
-                        role_name = f"นักผจญภัยแรงค์ {new_rank}"
-                        role = discord.utils.get(guild.roles, name=role_name)
-                        if role:
-                            try:
-                                await member.add_roles(role)
-                                rank_msg = f"\n🎖️ **สมาคมนักผจญภัยได้เลื่อนขั้นให้คุณเป็น: {role_name}!**"
-                                print(f"✅ [DEBUG] มอบยศ {role_name} ให้ {member.display_name} สำเร็จ")
-                            except discord.Forbidden:
-                                print(f"⚠️ [WARNING] บอทไม่มีสิทธิ์มอบยศ (Role Hierarchy ต่ำกว่าหรือขาด Permissions)")
-                            except Exception as e:
-                                print(f"❌ [ERROR] ระบบปรับยศดิสคอร์ดพัง: {e}")
-                        else:
-                            print(f"⚠️ [WARNING] ไม่พบยศชื่อ '{role_name}' ในเซิร์ฟเวอร์ดิสคอร์ด!")
-
-            except Exception as e:
-                print(f"❌ [ERROR] ระบบฐานข้อมูลหรือแรงค์พัง: {e}")
-                traceback.print_exc()
-
-            # -----------------------------------------------------------------
-            # 📩 การส่งข้อความกลับไปยัง Discord
-            # -----------------------------------------------------------------
-            try:
-                lv_up_msg = f"\n✨🎉 **LEVEL UP!! คุณเลเวลเพิ่มขึ้นเป็น Lv.{current_level}** พลังชีวิตสูงสุดเพิ่มขึ้น เลือดฟื้นฟูเต็มเปี่ยม! ✨🎉" if is_lv_up else ""
-                required_xp_display = (current_level ** 2) * 70
-                
-                final_content = f"{skill_log}{combat_log}🎉 **ยินดีด้วย! คุณสามารถโค่น {self.m_stats['name']} ลงได้สำเร็จ!**\n💰 ได้รับเงินรางวัล `{reward}` ทอง\n🔷 ได้รับค่าประสบการณ์ `+{gained_exp}` EXP *(สะสมปัจจุบัน: {current_exp}/{required_xp_display} XP)*{lv_up_msg}{rank_msg}{dropped_item_msg}{battle_end_log}"
-                
-                await interaction.response.edit_message(content=final_content, view=next_view)
-            
-            except discord.NotFound:
-                print("⚠️ [WARNING] สู้จบนานเกินไป Interaction หมดอายุ (404 Not Found) กำลังส่งเป็นข้อความธรรมดาแทน...")
                 try:
-                    await interaction.channel.send(content=f"<@{self.user_id}> {final_content}", view=next_view)
+                    loop_failsafe = 0 
+                    while loop_failsafe < 100:
+                        loop_failsafe += 1
+                        if current_level >= 100:
+                            current_exp = 0
+                            break
+                        
+                        required_exp = (current_level ** 2) * 70
+                        if current_exp >= required_exp:
+                            current_exp -= required_exp
+                            current_level += 1
+                            max_hp += 20
+                            is_lv_up = True
+                        else:
+                            break
+                    
+                    db_updates["exp"] = current_exp
+                    db_updates["level"] = current_level
+                    if is_lv_up:
+                        db_updates["max_hp"] = max_hp
+                        db_updates["hp"] = max_hp 
                 except Exception as e:
-                    print(f"❌ [ERROR] ไม่สามารถส่งข้อความแทนได้: {e}")
-            except Exception as e:
-                print(f"❌ [ERROR] การแก้ไขข้อความพัง: {e}")
-                traceback.print_exc()
+                    print(f"❌ [ERROR] ระบบคำนวณ EXP พัง: {e}")
+
+                rank_msg = ""
+                try:
+                    old_rank = player.get("rank", "F")
+                    if current_level >= 100: new_rank = "SSS"
+                    elif current_level >= 80: new_rank = "A"
+                    elif current_level >= 50: new_rank = "B"
+                    elif current_level >= 20: new_rank = "C"
+                    elif current_level >= 10: new_rank = "D"
+                    elif current_level >= 5: new_rank = "E"
+                    else: new_rank = "F"
+                    
+                    if old_rank != new_rank:
+                        db_updates["rank"] = new_rank
+                    
+                    player_model.update_player_fields(self.user_id, db_updates)
+                    
+                    if old_rank != new_rank:
+                        guild = interaction.guild
+                        member = interaction.user
+                        if guild and isinstance(member, discord.Member):
+                            role_name = f"นักผจญภัยแรงค์ {new_rank}"
+                            role = discord.utils.get(guild.roles, name=role_name)
+                            if role:
+                                try:
+                                    await member.add_roles(role)
+                                    rank_msg = f"\n🎖️ **สมาคมนักผจญภัยได้เลื่อนขั้นให้คุณเป็น: {role_name}!**"
+                                except Exception: pass
+                except Exception as e:
+                    print(f"❌ [ERROR] ระบบแรงค์พัง: {e}")
+
+                # -----------------------------------------------------------------
+                # 📩 จบการทำงาน (ส่งข้อความชนะแบบต้นฉบับ 100%)
+                # -----------------------------------------------------------------
+                try:
+                    lv_up_msg = f"\n✨🎉 **LEVEL UP!! คุณเลเวลเพิ่มขึ้นเป็น Lv.{current_level}** พลังชีวิตสูงสุดเพิ่มขึ้น เลือดฟื้นฟูเต็มเปี่ยม! ✨🎉" if is_lv_up else ""
+                    required_xp_display = (current_level ** 2) * 70
+                    
+                    final_content = f"{skill_log}{combat_log}🎉 **ยินดีด้วย! คุณสามารถโค่น {self.m_stats.get('name', 'มอนสเตอร์')} ลงได้สำเร็จ!**\n💰 ได้รับเงินรางวัล `{reward}` ทอง\n🔷 ได้รับค่าประสบการณ์ `+{gained_exp}` EXP *(สะสมปัจจุบัน: {current_exp}/{required_xp_display} XP)*{lv_up_msg}{rank_msg}{dropped_item_msg}{battle_end_log}"
+                    
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(content=final_content, view=next_view)
+                    else:
+                        await interaction.followup.edit_message(message_id=interaction.message.id, content=final_content, view=next_view)
+                
+                except discord.NotFound:
+                    print("⚠️ [WARNING] สู้จบนานเกินไป Interaction หมดอายุ กำลังส่งเป็นข้อความธรรมดาแทน...")
+                    try:
+                        await interaction.channel.send(content=f"<@{self.user_id}> {final_content}", view=next_view)
+                    except Exception as e:
+                        print(f"❌ [ERROR] ไม่สามารถส่งข้อความแทนได้: {e}")
+                except Exception as e:
+                    print(f"❌ [ERROR] ไม่สามารถแก้ไขข้อความตอนจบได้: {e}")
+
+            # =================================================================
+            # 💀 กรณี: ผู้เล่นแพ้ (เลือดหมด)
+            # =================================================================
+            elif db_updates.get("hp", player.get("hp", 0)) <= 0:
+                try:
+                    db_updates["current_state"] = "dead"
+                    player_model.update_player_fields(self.user_id, db_updates)
+                    
+                    fail_msg = f"{skill_log}{combat_log}💀 **คุณหมดสติลงกลางสนามรบเนื่องจากทนความโกรธของบอสไม่ไหว...**"
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(content=fail_msg, view=RespawnView(self.user_id))
+                    else:
+                        await interaction.followup.edit_message(message_id=interaction.message.id, content=fail_msg, view=RespawnView(self.user_id))
+                except Exception as e:
+                    print(f"❌ [ERROR] การแจ้งเตือนความตายพัง: {e}")
+
+            # =================================================================
+            # 🔄 กรณี: ยังไม่มีใครตาย (ไปเทิร์นถัดไป)
+            # =================================================================
+            else:
+                try:
+                    player_model.update_player_fields(self.user_id, db_updates)
+                    next_turn = self.turn_count + 1
+                    
+                    next_msg = f"⚔️ **[เทิร์นที่ {self.turn_count}] การต่อสู้ทวีความรุนแรง!**\n👾 ศัตรู: **{self.m_stats.get('name','?')}** (🩸 HP คงเหลือ: **{self.monster_hp}**)\n❤️ เลือดร่างกายของคุณ: **{db_updates['hp']}/{player.get('max_hp',100)}**\n\n{skill_log}{combat_log}----------------------------------------\nบอสจะแกร่งขึ้นเรื่อยๆ เลือกแอคชั่นหรือสกิลที่จะใช้ถัดไป:"
+                    
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(content=next_msg, view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn))
+                    else:
+                        await interaction.followup.edit_message(message_id=interaction.message.id, content=next_msg, view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn))
+                except Exception as e:
+                    print(f"❌ [ERROR] การไปเทิร์นถัดไปพัง: {e}")
+
+        # 🚨 CATCH-ALL: ดักจับ Error ขั้นรุนแรง 🚨
+        except Exception as global_e:
+            print(f"💥 [CRITICAL ERROR] ฟังก์ชัน process_turn ล่มสลาย!: {global_e}")
+            import traceback
+            traceback.print_exc() 
             
-        elif player["hp"] <= 0:
-            db_updates["current_state"] = "dead"
-            player_model.update_player_fields(self.user_id, db_updates)
-            
-            await interaction.response.edit_message(
-                content=f"{skill_log}{combat_log}💀 **คุณหมดสติลงกลางสนามรบเนื่องจากทนความโกรธของบอสไม่ไหว...**", 
-                view=RespawnView(self.user_id)
-            )
-        else:
-            player_model.update_player_fields(self.user_id, db_updates)
-            next_turn = self.turn_count + 1
-            await interaction.response.edit_message(
-                content=f"⚔️ **[เทิร์นที่ {self.turn_count}] การต่อสู้ทวีความรุนแรง!**\n👾 ศัตรู: **{self.m_stats['name']}** (🩸 HP คงเหลือ: **{self.monster_hp}**)\n❤️ เลือดร่างกายของคุณ: **{player['hp']}/{player['max_hp']}**\n\n{skill_log}{combat_log}----------------------------------------\nบอสจะแกร่งขึ้นเรื่อยๆ เลือกแอคชั่นหรือสกิลที่จะใช้ถัดไป:",
-                view=MonsterEventView(self.user_id, self.member_roles, self.monster_rank, self.monster_hp, self.active_buffs, turn_count=next_turn)
-            )
+            try:
+                error_msg = f"❌ **เกิดข้อผิดพลาดร้ายแรงระหว่างการต่อสู้!**\nระบบขัดข้องชั่วคราว โปรดแคปจอแจ้งแอดมิน: `{str(global_e)}`"
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                else:
+                    await interaction.followup.send(error_msg, ephemeral=True)
+            except Exception: pass
 
     @discord.ui.button(label="⚔️ สู้ต่อ (ทอยเต๋าปกติ)", style=discord.ButtonStyle.danger, row=0)
     async def fight_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
