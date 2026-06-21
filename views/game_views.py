@@ -71,10 +71,10 @@ EVENT_LIST = ["monster", "village", "treasure", "dungeon", "npc", "trap"]
 
 # โครงสร้างข้อมูลระดับความโหดของมอนสเตอร์
 MONSTER_RANKS = {
-    "Common":      {"name": "🟢 มอนสเตอร์ทั่วไป (Common)",      "dice_count": 1, "hp_range": (40, 100),   "flee_chance": 85,  "gold_mult": 5,   "exp_reward": 25},
-    "Mini-Boss":   {"name": "🟡 มินิบอส (Mini-Boss)",          "dice_count": 2, "hp_range": (100, 500),  "flee_chance": 60,  "gold_mult": 10,  "exp_reward": 50},
-    "Main-Boss":   {"name": "🔴 บอสหลัก (Main-Boss)",          "dice_count": 3, "hp_range": (500, 1000), "flee_chance": 30,  "gold_mult": 15,  "exp_reward": 250},
-    "Secret":      {"name": "🟣 มอนสเตอร์ลับ (Secret)",          "dice_count": 2, "hp_range": (100, 1000), "flee_chance": 50,  "gold_mult": 15,  "exp_reward": 250},
+    "Common":      {"name": "🟢 มอนสเตอร์ทั่วไป (Common)",      "dice_count": 1, "hp_range": (40, 100),   "flee_chance": 85,  "gold_mult": 1,   "exp_reward": 25},
+    "Mini-Boss":   {"name": "🟡 มินิบอส (Mini-Boss)",          "dice_count": 2, "hp_range": (100, 500),  "flee_chance": 60,  "gold_mult": 5,  "exp_reward": 50},
+    "Main-Boss":   {"name": "🔴 บอสหลัก (Main-Boss)",          "dice_count": 3, "hp_range": (500, 1000), "flee_chance": 30,  "gold_mult": 10,  "exp_reward": 250},
+    "Secret":      {"name": "🟣 มอนสเตอร์ลับ (Secret)",          "dice_count": 2, "hp_range": (100, 1000), "flee_chance": 50,  "gold_mult": 10,  "exp_reward": 250},
     "Unbeatable":  {"name": "💀 ไร้พ่าย (Unbeatable)",         "dice_count": 5, "hp_range": (1000, 2000), "flee_chance": 5,   "gold_mult": 1000, "exp_reward": 1000}
 }
 
@@ -340,7 +340,7 @@ class MonsterEventView(View):
             # 🏆 กรณี: ผู้เล่นชนะ (บอสตาย)
             # =================================================================
             if self.monster_hp <= 0:
-                reward = int(random.randint(30, 70) * self.m_stats.get("gold_mult", 1.0))
+                reward = int(random.randint(1, 25) * self.m_stats.get("gold_mult", 1.0))
                 gained_exp = self.m_stats.get("exp_reward", 10) + random.randint(5, 15)
                 
                 db_updates["cash"] = player.get("cash", 0) + reward
@@ -1144,7 +1144,7 @@ class NpcEventView(View):
         req_value = sum([ITEM_CONFIG.get(i, {}).get("buy", 0) for i in requested_items])
 
         # 3. สุ่มมูลค่าตอบแทน 50% - 1000%
-        reward_val = random.randint(int(req_value * 0.5), int(req_value * 10))
+        reward_val = random.randint(int(req_value * 0.5), int(req_value * 2))
 
         # 4. หาไอเทมตอบแทน (ต้องมีมูลค่าไม่เกิน reward_val)
         valid_items = [i for i, data in ITEM_CONFIG.items() if 0 < data.get("buy", 0) <= reward_val]
