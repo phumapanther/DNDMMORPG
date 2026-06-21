@@ -58,20 +58,20 @@ class VoiceChatTracker(commands.Cog):
 
                     # 2. ตั้งค่าตัวคูณพื้นฐานตามเลเวล
                     multiplier = 1
-                    if p_lvl >= 80: multiplier = 5
-                    elif p_lvl >= 40: multiplier = 4
-                    elif p_lvl >= 20: multiplier = 3
-                    elif p_lvl >= 10: multiplier = 2
+                    if p_lvl >= 80: multiplier = 0.5   # เลเวลสูงเก็บช้าลง
+                    elif p_lvl >= 40: multiplier = 0.8
+                    elif p_lvl >= 20: multiplier = 1.0
+                    else: multiplier = 1.5
 
                     # 3. เพิ่มโบนัสให้นักกวี (ได้รับ EXP เพิ่ม x4 จากโบนัสห้องเสียง)
                     # ถ้าเป็นนักกวี ให้คูณเพิ่มอีก 4 เท่าจากค่าเดิมที่คำนวณได้
                     if "ทีมงาน" in roles:
-                        multiplier = multiplier * 2
+                        multiplier = multiplier * 1.2
                         print(f"🛠️ [Voice Reward] คุณ {member.name} (ทีมงาน) ได้รับโบนัส EXP ห้องเสียง x2!")
 
                     # 3. เพิ่มโบนัสให้นักกวี (คูณ 4)
                     if "꒰ EN ꒱ นักกวี 𝄞⋆" in roles:
-                        multiplier = multiplier * 3
+                        multiplier = multiplier * 1.5
                         print(f"✨ [Voice Reward] คุณ {member.name} (นักกวี) ได้รับโบนัส EXP ห้องเสียง x4!")
 
                     final_gained_exp = base_exp * multiplier
@@ -128,12 +128,12 @@ class VoiceChatTracker(commands.Cog):
                         if role:
                             if is_rank_up or (role not in member.roles):
                                 try:
-                                    # 🧹 ล้างยศเก่าที่เคยมีออกให้หมดก่อน เพื่อป้องกันสิทธิ์ทับซ้อน
-                                    for old_role_name in rank_roles_names:
-                                        old_role = discord.utils.get(current_guild.roles, name=old_role_name)
-                                        if old_role and old_role in member.roles and old_role != role:
-                                            try: await member.remove_roles(old_role)
-                                            except: pass
+                                    # # 🧹 ล้างยศเก่าที่เคยมีออกให้หมดก่อน เพื่อป้องกันสิทธิ์ทับซ้อน
+                                    # for old_role_name in rank_roles_names:
+                                    #     old_role = discord.utils.get(current_guild.roles, name=old_role_name)
+                                    #     if old_role and old_role in member.roles and old_role != role:
+                                    #         try: await member.remove_roles(old_role)
+                                    #         except: pass
 
                                     # 🏅 สั่งแอดแจกยศล่าสุดเข้าไปแทนที่
                                     await member.add_roles(role)
