@@ -708,37 +708,88 @@ class PlayerCommands(commands.Cog):
         loser_new_hp = max(0, loser_current_hp - final_damage)
         player_model.update_player_field(l_member.id, "hp", loser_new_hp)
 
-        # 5. เช็กผลการตาย (HP เหลือ 0)
+        # 5. เช็กผลการตาย (HP เหลือ 0) และการให้รางวัล
         death_status_text = ""
-        reward_text = "" # ตัวแปรสำหรับโชว์รางวัล
+        reward_text = "" 
 
         if loser_new_hp <= 0:
             player_model.update_player_field(l_member.id, "current_state", "death")
             death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
             
             # --- 🏆 ระบบให้รางวัลผู้ชนะ ---
-            reward_exp = 100 + (loser.get("level", 1) * 20)  # พื้นฐาน 100 + เลเวลคู่ต่อสู้ * 20
-            reward_gold = 500 + (loser.get("level", 1) * 50) # พื้นฐาน 500 + เลเวลคู่ต่อสู้ * 50
+            reward_exp = 100 + (loser.get("level", 1) * 50)  
+            reward_gold = 500 + (loser.get("level", 1) * 100) 
             
-            # อัปเดต EXP (พร้อมเช็กเลเวลอัป)
             is_lvl_up, new_lvl, new_exp = player_model.add_exp(w_member.id, reward_exp)
             
-            # อัปเดตทอง
             new_winner_cash = winner.get("cash", 0) + reward_gold
             player_model.update_player_field(w_member.id, "cash", new_winner_cash)
             
-            # ข้อความรางวัล
             lvl_up_msg = f"\n✨ **Level Up!** คุณเลเวลอัปเป็น {new_lvl}!" if is_lvl_up else ""
             reward_text = f"\n💰 **ได้รับรางวัล:** `{reward_gold}` ทอง | `EXP +{reward_exp}`{lvl_up_msg}"
 
-        # ส่งข้อความสรุปผลการประลอง
+
+        # ==========================================
+        # 🧠 6. ระบบสูญเสียสติ (Sanity) ของผู้โจมตี
+        # ==========================================
+        sanity_loss = 5 + int(attacker.get("level", 1) * 0.25)
+        current_sanity = attacker.get("sanity", 100)
+        new_sanity = current_sanity - sanity_loss
+        
+        # อัปเดตสติลงฐานข้อมูล
+        player_model.update_player_field(ctx.author.id, "sanity", new_sanity)
+        sanity_text = f"\n🧠 **สติสัมปชัญญะ (ผู้โจมตี):** ลดลง `{sanity_loss}` หน่วย (ปัจจุบัน: {new_sanity})"
+        karma_text = ""
+
+        # เช็กเงื่อนไขสติแตก (ค่าสติติดลบ) - จะเช็กเฉพาะตอนผู้โจมตีเป็นฝ่ายเปิด
+        if new_sanity < 0:
+            deficit = abs(new_sanity) 
+            trigger_chance = min(0.90, 0.10 + (deficit * 0.02))
+            
+            if random.random() < trigger_chance:
+                import time 
+                
+                event_type = random.choice(["arrest", "execute"])
+                
+                if event_type == "arrest":
+                    jail_mins = 10 + (deficit * 3)
+                    jail_until = time.time() + (jail_mins * 60)
+                    
+                    player_model.update_player_fields(ctx.author.id, {
+                        "current_state": "arrested",
+                        "arrest_until": jail_until
+                    })
+                    karma_text = f"\n\n🚨 **เวรกรรมตามสนอง!** ความคลุ้มคลั่งทำให้ {ctx.author.mention} ถูกจับเข้าคุกเป็นเวลา `{jail_mins}` นาที!"
+                    
+                elif event_type == "execute":
+                    money_penalty = 1000 + (deficit * 200)
+                    level_penalty = 1 + int(deficit / 10)
+                    
+                    atk_current_cash = attacker.get("cash", 0)
+                    atk_current_level = attacker.get("level", 1)
+                    
+                    new_cash = max(0, atk_current_cash - money_penalty)
+                    new_level = max(1, atk_current_level - level_penalty)
+                    
+                    player_model.update_player_fields(ctx.author.id, {
+                        "cash": new_cash,
+                        "level": new_level,
+                        "current_state": "death",
+                        "hp": 0
+                    })
+                    karma_text = f"\n\n⚖️ **ถูกทางการวิสามัญ!** {ctx.author.mention} คลุ้มคลั่งจนถูกทหารรักษาพระนครประหารชีวิต!\n💸 ถูกยึดทรัพย์ `{money_penalty}` ทอง และถูกลดเลเวลลง `{level_penalty}` ระดับ!"
+
+        # 7. ส่งข้อความสรุปผลการประลอง (นำ Sanity Text เข้ามารวมแล้ว)
         embed = discord.Embed(
             title="⚔️ ผลการดวลศัสตราวุธ ลานประลอง ⚔️",
             description=f"**{w_member.display_name}** ทอยได้ `{base_dmg}` แต้ม ชนะการประลองในตานี้!\n"
                         f"💥 สร้างความเสียหายใส่ **{l_member.display_name}** จำนวน `💥 {final_damage}` หน่วย\n"
                         f"🩸 พลังชีวิตของ {l_member.display_name}: `{loser_current_hp}` ➔ `{loser_new_hp}`"
                         f"{death_status_text}"
-                        f"{reward_text}",
+                        f"{reward_text}"
+                        f"\n{'-'*30}"
+                        f"{sanity_text}"
+                        f"{karma_text}",
             color=discord.Color.red()
         )
         await ctx.send(embed=embed)

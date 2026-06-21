@@ -34,7 +34,8 @@ def init_db():
             total_text INTEGER DEFAULT 0,
             event_text INTEGER DEFAULT 0,
             bag TEXT DEFAULT 'Medium_Bag',
-            capacity INTEGER DEFAULT 10
+            capacity INTEGER DEFAULT 10,
+            sanity INTEGER DEFAULT 100
         )
     """)
     conn.commit()
@@ -50,7 +51,7 @@ def get_player(user_id):
         "armor", "armor_dur", "weapon", "weapon_dur", "current_state", 
         "last_event", "last_death", "village_cooldown", "dungeon_steps", 
         "total_online_time", "arrest_until", "total_text", "event_text", 
-        "bag", "capacity"
+        "bag", "capacity", "sanity"
     ]
     
     query = f"SELECT {', '.join(columns)} FROM players WHERE user_id = ?"

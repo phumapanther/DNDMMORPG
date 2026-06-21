@@ -1,5 +1,6 @@
 # profile_embed.py
 import discord
+import models.player_model as player_model
 
 # ─── 🧬 คลังข้อมูลเผ่าพันธุ์ (สลักชื่อตรงตามยศในเซิร์ฟเวอร์ดิสคอร์ด 100%) ───
 GAME_RACES = [
@@ -153,6 +154,9 @@ def create_profile_embed(target_member, player_data):
     total_max_hp = player_data.get("max_hp", 100)
     current_hp = min(player_data.get("hp", 100), total_max_hp)
 
+    #ดึงค่าสติ
+    sanity = player_data.get("sanity", 100)
+
     detected_race = "ไม่ระบุเผ่า"
     detected_class = "ไม่ระบุอาชีพ"
     player_faction = "⏳ กำลังระบุฝ่าย"
@@ -177,6 +181,16 @@ def create_profile_embed(target_member, player_data):
         elif role.name in GAME_CLASSES:
             detected_class = role.name
 
+    raw_inv = player_data.get("inventory", "[]")
+    capacity = player_data.get("capacity", 10)
+    
+    # 2. ส่งค่า raw_inv เข้าฟังก์ชัน load_inventory เพื่อแปลงเป็น List
+    # (ถ้า load_inventory อยู่ใน player_model ก็เรียก player_model.load_inventory)
+    inv_list = player_model.load_inventory(raw_inv) 
+    
+    # 3. จัดการเรื่องแสดงผลความจุกระเป๋า (ใช้ Ternary ที่เราทำกันไว้)
+    cap_display = 'ไม่จำกัด' if capacity == 0 else capacity
+
     # 🧬 [ระบบคำนวณลูกผสม] ถ้าเช็กแล้วพบว่ามียศเผ่าพันธุ์รวมกันตั้งแต่ 2 เผ่าขึ้นไป
     if len(found_races) >= 2:
         # ดึงเฉพาะชื่อสั้นมาโชว์คู่กัน เช่น เอลฟ์ + Slime
@@ -196,14 +210,21 @@ def create_profile_embed(target_member, player_data):
     embed.add_field(name="💰 เงินสด", value=f"🪙 {player_data.get('cash', 0)} ทอง", inline=True)
     
     # 🧬 เผ่าพันธุ์ & อาชีพ
-    embed.add_field(name="🧬 เผ่าพันธุ์", value=f"🟢 {detected_race}\n\n\n\n👑 **{player_faction}**", inline=True)
+    embed.add_field(name="🧬 เผ่าพันธุ์", value=f"🟢 {detected_race}\n\n\n\n👑 **{player_faction} (สติ {sanity})**", inline=True)
     embed.add_field(name="⚔️ คลาสอาชีพ", value=f"🔵 {detected_class}", inline=True)
+ 
     embed.add_field(name="​", value="​", inline=False) 
 
     # 🛡️ อุปกรณ์ & ความทนทาน (เพิ่มอาวุธและความทนทาน)
     embed.add_field(name="⚔️ อาวุธที่ถือ", value=f"**{weapon_info['name']}**\nความทนทาน: `{player_data.get('weapon_dur', 0)}/{weapon_info['dur']}`", inline=True)
     embed.add_field(name="🛡️ เกราะที่สวม", value=f"**{armor_info['name']}**\nความทนทาน: `{player_data.get('armor_dur', 0)}/{armor_info['dur']}`", inline=True)
     
+    embed.add_field(
+        name="🎒 กระเป๋าสัมภาระ", 
+        value=f"บรรจุไอเทมอยู่: `{len(inv_list)} / {cap_display}` ชิ้น\n\n", 
+        inline=False
+    )
+
     # 💨 สถานะการป้องกัน/การซ่อนตัว
     embed.add_field(name="💨 หลบหลีก / 👁️ มองเห็น", value=f"🏃 {armor_info['eva']}% / ⚠️ ระดับ: {armor_info['vis']}", inline=False)
     

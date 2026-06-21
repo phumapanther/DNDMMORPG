@@ -29,6 +29,7 @@ NEW_PLAYER_DEFAULTS = {
     "event_text": 0,
     "bag": "Medium_Bag",
     "capacity": 10,
+    "sanity": 100
 }
     
 def init_db():
@@ -40,17 +41,29 @@ def init_db():
         CREATE TABLE IF NOT EXISTS players (
             user_id INTEGER PRIMARY KEY,
             level INTEGER DEFAULT 1,
+            exp INTEGER DEFAULT 0,
+            rank TEXT DEFAULT 'F',
             hp INTEGER DEFAULT 100,
             max_hp INTEGER DEFAULT 100,
             cash INTEGER DEFAULT 20000,
             bank INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             armor TEXT DEFAULT 'None',
+            armor_dur INTEGER DEFAULT 100,
+            weapon TEXT DEFAULT 'Wooden_Weapon',
+            weapon_dur INTEGER DEFAULT 50,
             current_state TEXT DEFAULT 'village',
             last_event TEXT DEFAULT 'none',
             last_death TEXT,
             village_cooldown INTEGER DEFAULT 0,
-            dungeon_steps INTEGER DEFAULT 0
+            dungeon_steps INTEGER DEFAULT 0,
+            total_online_time INTEGER DEFAULT 0,
+            arrest_until INTEGER DEFAULT 0,
+            total_text INTEGER DEFAULT 0,
+            event_text INTEGER DEFAULT 0,
+            bag TEXT DEFAULT 'Medium_Bag',
+            capacity INTEGER DEFAULT 10,
+            sanity INTEGER DEFAULT 100
         )
     """)
     

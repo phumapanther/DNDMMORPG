@@ -1065,5 +1065,239 @@ class AdminCommands(commands.Cog):
         if isinstance(error, commands.MissingPermissions):
             await ctx.send("⛔ **ปฏิเสธคำสั่ง:** คุณไม่มีสิทธิ์ใช้งานคำสั่งนี้!")
 
+    # 💰 1. คำสั่งเคลียร์เงินทั้งหมด (เงินสด + ธนาคาร)
+    @has_role_or_owner("คนบ้า")
+    @commands.command(name="clearmoney")
+    @commands.has_permissions(administrator=True) # จำกัดสิทธิ์ให้เฉพาะแอดมินใช้
+    async def clear_money(self, ctx, member: discord.Member = None):
+        if not member:
+            return await ctx.send("❌ **กรุณาระบุชื่อผู้เล่น!** เช่น `!clearmoney @username`")
+        
+        # ทำการรีเซ็ตเงินสดและธนาคารให้กลับเป็น 0
+        updates = {
+            "cash": 0,
+            "bank": 0
+        }
+        player_model.update_player_fields(member.id, updates)
+        
+        await ctx.send(f"🧹 เคลียร์เงินสดและเงินในธนาคารของ {member.mention} เป็น `0` ทอง เรียบร้อยแล้ว!")
+
+    # 🌟 2. คำสั่งเคลียร์เลเวล, EXP, และถอดยศแรงค์ทั้งหมดในดิสคอร์ด
+    @has_role_or_owner("คนบ้า")
+    @commands.command(name="clearlevel")
+    @commands.has_permissions(administrator=True) # จำกัดสิทธิ์ให้เฉพาะแอดมินใช้
+    async def clear_level(self, ctx, member: discord.Member = None):
+        if not member:
+            return await ctx.send("❌ **กรุณาระบุชื่อผู้เล่น!** เช่น `!clearlevel @username`")
+        
+        # 1. รีเซ็ตข้อมูลในฐานข้อมูลกลับเป็นสเตตัสเริ่มต้น (เลเวล 1, แรงค์ F, เลือดเต็ม)
+        updates = {
+            "level": 1,
+            "exp": 0,
+            "rank": "F",
+            "hp": 100,
+            "max_hp": 100
+        }
+        player_model.update_player_fields(member.id, updates)
+        
+        # 2. รายชื่อยศ/บทบาทแรงค์ทั้งหมดในดิสคอร์ดที่คุณอาเธอร์กำหนดไว้
+        rank_roles_names = [
+            "• นักผจญภัยแรงค์ F",
+            "• นักผจญภัยแรงค์ E",
+            "• นักผจญภัยแรงค์ D",
+            "• นักผจญภัยแรงค์ C",
+            "• นักผจญภัยแรงค์ B",
+            "• นักผจญภัยแรงค์ A",
+            "• นักผจญภัยแรงค์ S 🗺️",
+            "• นักผจญภัยแรงค์ SS 💰",
+            "• นักผจญภัยแรงค์ SSS 👑"
+        ]
+        
+        removed_count = 0
+        
+        # ลูปตรวจสอบและถอดยศในเซิร์ฟเวอร์ดิสคอร์ด
+        for role_name in rank_roles_names:
+            role = discord.utils.get(ctx.guild.roles, name=role_name)
+            # ถ้าเจอยศในเซิร์ฟเวอร์ และผู้เล่นคนนั้นมียศนี้อยู่จริง
+            if role and role in member.roles:
+                try:
+                    await member.remove_roles(role)
+                    removed_count += 1
+                except discord.Forbidden:
+                    print(f"⚠️ [WARNING] บอทไม่มีสิทธิ์ถอดยศ '{role_name}' (ยศบอทอาจจะอยู่ต่ำกว่ายศนี้)")
+                except Exception as e:
+                    print(f"⚠️ [ERROR] เกิดข้อผิดพลาดในการถอดยศ {role_name}: {e}")
+                    
+        await ctx.send(
+            f"🌟 รีเซ็ตเลเวล, EXP, และแรงค์ของ {member.mention} กลับเป็นเลเวล 1 เรียบร้อยแล้ว!\n"
+            f"🚫 ดึงยศแรงค์เดิมออกจากตัวผู้เล่นเรียบร้อยทั้งหมด `{removed_count}` ยศ"
+        )
+        
+    # 👑 กำหนด ID ของยศกษัตริย์ (ใส่เป็นตัวเลข Integer ได้เลย)
+    KING_ROLE_ID = 1148147180243267624 
+
+    def get_king_ids(self, ctx):
+        """ฟังก์ชันช่วยหาว่าใครมียศกษัตริย์บ้างผ่าน Role ID"""
+        # ใช้ get_role(ID) แทนการหาด้วยชื่อ
+        role = ctx.guild.get_role(self.KING_ROLE_ID)
+        
+        if not role:
+            print(f"⚠️ [WARNING] หายศกษัตริย์ ID {self.KING_ROLE_ID} ไม่เจอในเซิร์ฟเวอร์นี้!")
+            return []
+            
+        # คืนค่า List ของ ID ผู้เล่นทุกคนที่มียศกษัตริย์
+        return [member.id for member in role.members]
+
+    # ==========================================
+    # ⚖️ 1. คำสั่งเก็บภาษีขุนนาง (!tax)
+    # ==========================================
+    @commands.command(name="tax")
+    @commands.has_permissions(administrator=True)
+    async def collect_tax(self, ctx, min_wealth: int = None, tax_rate: int = None):
+        if min_wealth is None or tax_rate is None:
+            return await ctx.send("❌ **กรุณาระบุเงื่อนไขให้ครบ!**\nวิธีใช้: `!tax [เงินขั้นต่ำ] [เปอร์เซ็นต์]`")
+
+        if tax_rate <= 0 or tax_rate > 100:
+            return await ctx.send("❌ เปอร์เซ็นต์ภาษีต้องอยู่ระหว่าง 1 - 100%")
+
+        await ctx.send("⏳ **กำลังเริ่มกระบวนการจัดเก็บภาษีหลวงทั่วอาณาจักร...**")
+
+        king_ids = self.get_king_ids(ctx)
+        all_players = player_model.get_all_players()
+        
+        taxed_players_count = 0
+        total_tax_collected = 0
+
+        for p_info in all_players:
+            p_id = p_info["user_id"]
+            
+            # กษัตริย์ทุกคนได้รับการยกเว้นภาษี
+            if p_id in king_ids:
+                continue
+
+            player = player_model.get_player(p_id)
+            cash = player.get("cash", 0)
+            bank = player.get("bank", 0)
+            total_wealth = cash + bank
+
+            if total_wealth >= min_wealth:
+                tax_amount = int(total_wealth * (tax_rate / 100))
+                
+                if tax_amount > 0:
+                    total_tax_collected += tax_amount
+                    taxed_players_count += 1
+
+                    if cash >= tax_amount:
+                        player_model.update_player_fields(p_id, {"cash": cash - tax_amount})
+                    else:
+                        remaining_tax = tax_amount - cash
+                        player_model.update_player_fields(p_id, {"cash": 0, "bank": max(0, bank - remaining_tax)})
+
+        if taxed_players_count == 0:
+            return await ctx.send("🍃 ไม่พบขุนนางที่มีทรัพย์สินเกินเกณฑ์ที่กำหนดในรอบนี้")
+
+        # สรุปยอดปันส่วนภาษี
+        burned_amount = int(total_tax_collected * 0.5) 
+        king_pool_amount = total_tax_collected - burned_amount 
+
+        # นำอีก 50% มาหารแบ่งให้กษัตริย์ทุกคน (ถ้ามีกษัตริย์)
+        split_per_king = 0
+        if king_ids and king_pool_amount > 0:
+            split_per_king = king_pool_amount // len(king_ids)
+            for k_id in king_ids:
+                k_data = player_model.get_player(k_id)
+                new_cash = k_data.get("cash", 0) + split_per_king
+                player_model.update_player_field(k_id, "cash", new_cash)
+
+        # ส่ง Embed รายงานท้องพระโรง
+        embed = discord.Embed(
+            title="📜 ประกาศจัดเก็บภาษีหลวงป้องกันเงินเฟ้อ",
+            color=discord.Color.dark_gold()
+        )
+        embed.add_field(name="👥 ขุนนางที่ถูกเก็บภาษี", value=f"`{taxed_players_count}` ท่าน (ทรัพย์สิน >= `{min_wealth:,}`)", inline=False)
+        embed.add_field(name="💰 ยอดภาษีรวม", value=f"`{total_tax_collected:,}` ทอง (อัตรา `{tax_rate}`%)", inline=False)
+        embed.add_field(name="🔥 ทำลายทิ้ง (50%)", value=f"`{burned_amount:,}` ทอง", inline=True)
+        
+        king_count_text = f"{len(king_ids)} พระองค์ (องค์ละ {split_per_king:,} ทอง)" if king_ids else "ไม่มีกษัตริย์รับเงิน"
+        embed.add_field(name="👑 เข้าพระคลังกษัตริย์ (50%)", value=king_count_text, inline=True)
+        
+        await ctx.send(embed=embed)
+
+
+    # ==========================================
+    # 🏦 2. คำสั่งแจกจ่ายดอกเบี้ยเยียวยา (!interest)
+    # ==========================================
+    @commands.command(name="interest")
+    @commands.has_permissions(administrator=True)
+    async def distribute_interest(self, ctx, max_wealth: int = None, interest_rate: int = None):
+        if max_wealth is None or interest_rate is None:
+            return await ctx.send("❌ **กรุณาระบุเงื่อนไขให้ครบ!**\nวิธีใช้: `!interest [เงินสูงสุด] [เปอร์เซ็นต์ดอกเบี้ย]`")
+
+        king_ids = self.get_king_ids(ctx)
+        if not king_ids:
+            return await ctx.send("❌ ไม่สามารถแจกจ่ายได้เนื่องจากไม่มีผู้เล่นที่มียศกษัตริย์ในเซิร์ฟเวอร์นี้เลย!")
+
+        all_players = player_model.get_all_players()
+        payout_list = []
+        total_interest_needed = 0
+
+        # 1. คำนวณเงินที่จะต้องแจกให้ประชาชน
+        for p_info in all_players:
+            p_id = p_info["user_id"]
+            if p_id in king_ids: # กษัตริย์ไม่ได้ดอกเบี้ยช่วยเหลือ
+                continue
+
+            player = player_model.get_player(p_id)
+            cash = player.get("cash", 0)
+            bank = player.get("bank", 0)
+            total_wealth = cash + bank
+
+            if total_wealth <= max_wealth and bank > 0:
+                interest_amount = int(bank * (interest_rate / 100))
+                if interest_amount > 0:
+                    total_interest_needed += interest_amount
+                    payout_list.append((p_id, bank, interest_amount))
+
+        if not payout_list:
+            return await ctx.send("🍃 ไม่มีราษฎรคนไหนเข้าเกณฑ์รับเงินเยียวยาในรอบนี้")
+
+        # 2. เช็กเงินรวมของกษัตริย์ทุกคนว่าพอจ่ายไหม
+        kings_data = []
+        total_king_wealth = 0
+        for k_id in king_ids:
+            k_cash = player_model.get_player(k_id).get("cash", 0)
+            total_king_wealth += k_cash
+            kings_data.append({"id": k_id, "cash": k_cash})
+
+        if total_king_wealth < total_interest_needed:
+            return await ctx.send(f"❌ **เงินกองทุนกษัตริย์รวมกันไม่พอแจก!**\nต้องการ: `{total_interest_needed:,}` ทอง | กษัตริย์มีรวมกัน: `{total_king_wealth:,}` ทอง")
+
+        # 3. หักเงินจากกษัตริย์ (ดึงจากคนรวยสุดก่อน เพื่อความแฟร์)
+        kings_data.sort(key=lambda x: x["cash"], reverse=True) 
+        remaining_to_deduct = total_interest_needed
+
+        for k in kings_data:
+            if remaining_to_deduct <= 0:
+                break
+            # หักเท่าที่หักได้ (ไม่เกินยอดเงินของกษัตริย์คนนั้น หรือไม่เกินยอดหนี้ที่เหลือ)
+            take_amount = min(k["cash"], remaining_to_deduct)
+            player_model.update_player_field(k["id"], "cash", k["cash"] - take_amount)
+            remaining_to_deduct -= take_amount
+
+        # 4. โอนเงินเข้าธนาคารคนจน
+        for p_id, current_bank, interest_amount in payout_list:
+            player_model.update_player_field(p_id, "bank", current_bank + interest_amount)
+
+        embed = discord.Embed(
+            title="🏦 ท้องพระโรงประกาศมอบดอกเบี้ยเยียวยาประชากร",
+            description=f"กษัตริย์ทรงรวมเงินทรัพย์สินส่วนพระองค์แจกจ่ายแก่ราษฎร!",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="📊 เกณฑ์การช่วยเหลือ", value=f"ทรัพย์สินรวม <= `{max_wealth:,}` ทอง\nดอกเบี้ย `{interest_rate}`%", inline=False)
+        embed.add_field(name="👥 ราษฎรที่ได้รับการช่วยเหลือ", value=f"`{len(payout_list)}` ท่าน", inline=True)
+        embed.add_field(name="💰 ยอดเงินเยียวยารวม", value=f"`{total_interest_needed:,}` ทอง", inline=True)
+
+        await ctx.send(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))
