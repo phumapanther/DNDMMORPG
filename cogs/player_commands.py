@@ -16,6 +16,7 @@ class PlayerCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db_path = "game_data.db"
+        self.pk_cooldowns = {} #
 
     # --- Database Context Manager ---
     @contextmanager
@@ -683,6 +684,15 @@ class PlayerCommands(commands.Cog):
         if attacker.get("level", 0) < 20 or defender.get("level", 0) < 20:
             return await ctx.send("❌ ระบบ PVP รองรับเฉพาะผู้กล้าเลเวล 20 ขึ้นไปเท่านั้น! (และห้ามรังแกผู้เล่นเลเวลต่ำกว่า 20)")
         
+        now = time.time()
+        if ctx.author.id in self.pk_cooldowns:
+            cooldown_end = self.pk_cooldowns[ctx.author.id]
+            if now < cooldown_end:
+                remaining = int(cooldown_end - now)
+                minutes = remaining // 60
+                seconds = remaining % 60
+                return await ctx.send(f"⏳ **คุณอยู่ในช่วงพักทำใจหลังการสังหาร!** โปรดรออีก `{minutes} นาที {seconds} วินาที` จึงจะสั่งโจมตีครั้งถัดไปได้")
+        
         #คำนวณความห่างของเลเวลเพื่อเพิ่มความยากในการทอย
         lv_diff = attacker.get("level", 0) - defender.get("level", 0)
         
@@ -726,9 +736,6 @@ class PlayerCommands(commands.Cog):
         reward_text = "" 
 
         if loser_new_hp <= 0:
-            player_model.update_player_field(l_member.id, "current_state", "death")
-            death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
-            
             # --- 🏆 ระบบให้รางวัลผู้ชนะ ---
             reward_exp = 100 + (loser.get("level", 1) * 1000)  
             reward_gold = 500 + (loser.get("level", 1) * 500) 
@@ -740,7 +747,11 @@ class PlayerCommands(commands.Cog):
             
             lvl_up_msg = f"\n✨ **Level Up!** คุณเลเวลอัปเป็น {new_lvl}!" if is_lvl_up else ""
             reward_text = f"\n💰 **ได้รับรางวัล:** `{reward_gold}` ทอง | `EXP +{reward_exp}`{lvl_up_msg}"
-
+            
+            cooldown_seconds = random.randint(300, 600) # สุ่ม 5 ถึง 10 นาที
+            self.pk_cooldowns[ctx.author.id] = time.time() + cooldown_seconds
+            player_model.update_player_field(l_member.id, "current_state", "death")
+            death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
 
         # ==========================================
         # 🧠 6. ระบบสูญเสียสติ (Sanity) ของผู้โจมตี
@@ -759,9 +770,7 @@ class PlayerCommands(commands.Cog):
             deficit = abs(new_sanity) 
             trigger_chance = min(0.90, 0.10 + (deficit * 0.02))
             
-            if random.random() < trigger_chance:
-                import time 
-                
+            if random.random() < trigger_chance:                
                 event_type = random.choice(["arrest", "execute"])
                 
                 if event_type == "arrest":
@@ -917,6 +926,38 @@ class PlayerCommands(commands.Cog):
             print(f"❌ [CRITICAL ERROR] การคราฟพัง! สาเหตุ: {e}")
             traceback.print_exc() # แสดงบรรทัดที่พังใน Console
             await ctx.send(f"⚠️ ระบบคราฟมีปัญหาทางเทคนิค! (Error: {str(e)})")
+            
+    # สแกนผู้เล่นว่าตีได้หรือไม่
+    @allowed_channels(["⚒-แชทลานประลอง-⚒"]) # 🛠️ ใช้ Decorator บล็อกห้อง
+    @not_arrested() # 🛠️ บล็อกคนติดคุก
+    @commands.command(name="scan")
+    async def scan_target(self, ctx, member: discord.Member):
+        # 1. โหลดข้อมูลเป้าหมายจาก DB
+        target = player_model.get_player(member.id)
+        if not target:
+            return await ctx.send(f"❌ ไม่พบข้อมูลของ {member.name} ในฐานข้อมูล!")
+
+        # 2. ตรวจสอบสถานะและเงื่อนไข
+        lvl = target.get("level", 1)
+        state = target.get("current_state", "unknown")
+        is_online = member.status != discord.Status.offline
+        in_voice = member.voice is not None
+        
+        # 3. สรุปผล
+        can_attack = (lvl >= 20 and state not in ["village", "death"] and is_online and in_voice)
+        
+        status_msg = (
+            f"🔍 **รายงานการสแกนเป้าหมาย: {member.name}**\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📊 **เลเวล:** {lvl} {'✅' if lvl >= 20 else '❌'}\n"
+            f"📍 **สถานที่:** {state} {'✅' if state not in ['village', 'death'] else '❌'}\n"
+            f"🟢 **ออนไลน์:** {'ใช่' if is_online else 'ไม่ใช่'} {'✅' if is_online else '❌'}\n"
+            f"🎧 **อยู่ในห้องเสียง:** {'ใช่' if in_voice else 'ไม่ใช่'} {'✅' if in_voice else '❌'}\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"⚔️ **ผลลัพธ์:** {'**[ตีได้! ล่าได้เลย!]**' if can_attack else '**[ยังตีไม่ได้/เงื่อนไขไม่ครบ]**'}"
+        )
+        
+        await ctx.send(status_msg)
 
 # 🚨 ลบอันที่ซ้ำออกเหลือแค่อันเดียว
 async def setup(bot):

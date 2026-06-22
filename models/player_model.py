@@ -66,6 +66,14 @@ def init_db():
             sanity INTEGER DEFAULT 100
         )
     """)
+
+    # 2. 🤖 เพิ่มตารางสมองกลบอทตรงนี้! (แยกตาราง แต่ไฟล์ db เดียวกัน)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bot_data (
+            bot_name TEXT PRIMARY KEY,
+            memory TEXT
+        )
+    """)
     
     conn.commit()
     conn.close()

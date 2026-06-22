@@ -21,6 +21,7 @@ def create_bot(bot_type: str):
     intents.message_content = True
     intents.members = True
     intents.voice_states = True # 🌟 เปิดสิทธิ์แสกนรายชื่อในห้อง Voice
+    intents.presences = True        # จำเป็นสำหรับการเช็ก Online/Offline
 
     bot = commands.Bot(command_prefix="!", intents=intents)
     bot.CURRENT_EVENT_MULTIPLIER = 1.0  # เก็บไว้ที่ตัวบอทเลย
@@ -103,6 +104,21 @@ def create_bot(bot_type: str):
 
                 await bot.load_extension('cogs.adventure_zone')
                 print("🌌 [Adventure Zone] โหลดระบบห้องผจญภัยส่วนตัวสำเร็จ!")
+
+                await bot.load_extension("cogs.private_room")
+                print("🏠 [Private Room Bot] โหลดระบบคำสั่ง สร้างห้อง สำเร็จ!")
+                
+                await bot.load_extension("cogs.pvp_duel")
+                print("⚔️ [PVP Commands] โหลดระบบคำสั่ง PVP สำเร็จ!")
+
+                await bot.load_extension("cogs.world_boss")
+                print("👿[World Boss Commands] โหลดระบบคำสั่ง Boss สำเร็จ!")
+
+                await bot.load_extension("cogs.casino")
+                print("🎰[World Boss Commands] โหลดระบบคำสั่ง casino สำเร็จ!")
+
+                await bot.load_extension("cogs.bj24")
+                print("🃏[World Boss Commands] โหลดระบบคำสั่ง bj24!")
                 
             elif bot_type == "chat":
                 await bot.load_extension("cogs.voice_chat_tracker")
@@ -150,8 +166,8 @@ async def main():
     # 🔥 [สั่งรันเฉพาะบอทแรก] บายพาสตัวที่ 2 และ 3 ออกไปก่อนชั่วคราว
     await asyncio.gather(
         run_game_bot(TOKEN_GAME),
-        # run_chat_bot(TOKEN_CHAT_VOICE), # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
-        # run_admin_bot(TOKEN_ADMIN)      # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
+        # run_game_bot(TOKEN_CHAT_VOICE), # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
+        # run_game_bot(TOKEN_ADMIN)      # 💤 ปิดคอมเมนต์ไว้ชั่วคราว
     )
 
 if __name__ == "__main__":
