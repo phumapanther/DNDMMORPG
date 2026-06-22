@@ -1132,7 +1132,7 @@ class AdminCommands(commands.Cog):
             f"🌟 รีเซ็ตเลเวล, EXP, และแรงค์ของ {member.mention} กลับเป็นเลเวล 1 เรียบร้อยแล้ว!\n"
             f"🚫 ดึงยศแรงค์เดิมออกจากตัวผู้เล่นเรียบร้อยทั้งหมด `{removed_count}` ยศ"
         )
-        
+
     # 👑 กำหนด ID ของยศกษัตริย์ (ใส่เป็นตัวเลข Integer ได้เลย)
     KING_ROLE_ID = 1148147180243267624 
 
@@ -1299,18 +1299,16 @@ class AdminCommands(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    CURRENT_EVENT_MULTIPLIER = 1
+    # CURRENT_EVENT_MULTIPLIER = 1
     
     @commands.command(name="Xexp")
     @commands.has_permissions(administrator=True)
     async def set_exp_multiplier(self, ctx, multiplier: float):
-        global CURRENT_EVENT_MULTIPLIER
-        
-        # ป้องกันค่าติดลบหรือค่าที่แปลกเกินไป
         if multiplier <= 0:
             return await ctx.send("❌ ตัวคูณต้องมากกว่า 0!")
         
-        CURRENT_EVENT_MULTIPLIER = multiplier
+        # เข้าถึงค่าที่ฝากไว้ในตัวบอท
+        ctx.bot.CURRENT_EVENT_MULTIPLIER = multiplier
         
         status = "ปกติ" if multiplier == 1 else f"{multiplier} เท่า"
         await ctx.send(f"✅ **ปรับระบบคูณ EXP แล้ว!** ปัจจุบันค่าคูณอยู่ที่: `{status}`")

@@ -5,7 +5,6 @@ import random
 import time
 
 # ค่าเริ่มต้นเป็น 1 (ปกติ)
-from cogs.admin_commands import CURRENT_EVENT_MULTIPLIER
 
 class VoiceChatTracker(commands.Cog):
     def __init__(self, bot):
@@ -31,7 +30,6 @@ class VoiceChatTracker(commands.Cog):
     @tasks.loop(minutes=1.0)
     async def voice_exp_tracker(self):
         # """Loop หลังบ้านสแกนหาผู้เล่นเพื่อแจก EXP พร้อมคิดโบนัสคูณ และเก็บระยะเวลาสะสมลงฐานข้อมูล"""
-        global CURRENT_EVENT_MULTIPLIER
         for guild in self.bot.guilds:
             for voice_channel in guild.voice_channels:
                 member_count = len(voice_channel.members)
@@ -60,7 +58,7 @@ class VoiceChatTracker(commands.Cog):
                     roles = [role.name for role in member.roles]
 
                     # 2. ตั้งค่าตัวคูณพื้นฐานตามเลเวล
-                    multiplier = 1
+                    multiplier = 0.5
                     if p_lvl >= 80: multiplier = 0.5   # เลเวลสูงเก็บช้าลง
                     elif p_lvl >= 40: multiplier = 0.8
                     elif p_lvl >= 20: multiplier = 1.0
@@ -78,7 +76,8 @@ class VoiceChatTracker(commands.Cog):
                         print(f"✨ [Voice Reward] คุณ {member.name} (นักกวี) ได้รับโบนัส EXP ห้องเสียง x4!")
 
                     # 4. 🎁 ตัวคูณพิเศษช่วงกิจกรรม (กำหนดเป็น 2 ถ้าเปิดกิจกรรม, เป็น 1 ถ้าปิด)
-                    final_multiplier = multiplier * CURRENT_EVENT_MULTIPLIER
+                    event_multiplier = getattr(self.bot, "CURRENT_EVENT_MULTIPLIER", 1.0)
+                    final_multiplier = multiplier * event_multiplier
 
                     final_gained_exp = base_exp * final_multiplier
                     is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
@@ -87,7 +86,7 @@ class VoiceChatTracker(commands.Cog):
                     
                     if is_lv_up:
                         print(f"✨🎉 [LEVEL UP] -> {member.name} เลเวลอัปเป็น Lv.{new_lv} !!")
-                        target_channel = discord.utils.get(member.guild.channels, name="〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟")
+                        target_channel = discord.utils.get(member.guild.channels, name="〔⚔〕โดมอัพแรงค์ผจญภัย-⍟")
                         if target_channel:
                             try:
                                 # ส่งข้อความแท็กเรียกผู้เล่นประกาศความสำเร็จลงห้องที่กำหนด
@@ -99,7 +98,7 @@ class VoiceChatTracker(commands.Cog):
                             except Exception as e:
                                 print(f"⚠️ [LEVEL UP ERROR] ไม่สามารถส่งข้อความลงห้องได้เนื่องจาก: {e}")
                         else:
-                            print("❌ [LEVEL UP ERROR] หาห้องแชท '〔⚔〕โดมเลื่อนขั้นนักผจญภัย-⍟' ไม่พบในเซิร์ฟเวอร์")
+                            print("❌ [LEVEL UP ERROR] หาห้องแชท '〔⚔〕โดมอัพแรงค์ผจญภัย-⍟' ไม่พบในเซิร์ฟเวอร์")
                     
                     # 🏅 ตรวจสอบและอัปเดตยศ (Rank) แบบสะสมยศเก่าไม่ลบ
                     updated_player = player_model.get_player(member.id)

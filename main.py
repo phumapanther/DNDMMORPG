@@ -23,6 +23,7 @@ def create_bot(bot_type: str):
     intents.voice_states = True # 🌟 เปิดสิทธิ์แสกนรายชื่อในห้อง Voice
 
     bot = commands.Bot(command_prefix="!", intents=intents)
+    bot.CURRENT_EVENT_MULTIPLIER = 1.0  # เก็บไว้ที่ตัวบอทเลย
     bot.bot_type = bot_type
     @bot.event
     async def on_command_error(ctx, error):
