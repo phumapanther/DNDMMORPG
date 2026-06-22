@@ -4,6 +4,9 @@ import models.player_model as player_model
 import random
 import time
 
+# ค่าเริ่มต้นเป็น 1 (ปกติ)
+from cogs.admin_commands import CURRENT_EVENT_MULTIPLIER
+
 class VoiceChatTracker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -28,7 +31,7 @@ class VoiceChatTracker(commands.Cog):
     @tasks.loop(minutes=1.0)
     async def voice_exp_tracker(self):
         # """Loop หลังบ้านสแกนหาผู้เล่นเพื่อแจก EXP พร้อมคิดโบนัสคูณ และเก็บระยะเวลาสะสมลงฐานข้อมูล"""
-        
+        global CURRENT_EVENT_MULTIPLIER
         for guild in self.bot.guilds:
             for voice_channel in guild.voice_channels:
                 member_count = len(voice_channel.members)
@@ -74,7 +77,10 @@ class VoiceChatTracker(commands.Cog):
                         multiplier = multiplier * 1.5
                         print(f"✨ [Voice Reward] คุณ {member.name} (นักกวี) ได้รับโบนัส EXP ห้องเสียง x4!")
 
-                    final_gained_exp = base_exp * multiplier
+                    # 4. 🎁 ตัวคูณพิเศษช่วงกิจกรรม (กำหนดเป็น 2 ถ้าเปิดกิจกรรม, เป็น 1 ถ้าปิด)
+                    final_multiplier = multiplier * CURRENT_EVENT_MULTIPLIER
+
+                    final_gained_exp = base_exp * final_multiplier
                     is_lv_up, new_lv, _ = player_model.add_exp(member.id, final_gained_exp)
                     
                     log_time = player.get("total_online_time", 0) + 1
@@ -85,10 +91,10 @@ class VoiceChatTracker(commands.Cog):
                         if target_channel:
                             try:
                                 # ส่งข้อความแท็กเรียกผู้เล่นประกาศความสำเร็จลงห้องที่กำหนด
-                                # await target_channel.send(
-                                #     f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมผจญภัยและพูดคุย ส่งผลให้คุณ {member.mention} "
-                                #     f"เลเวลอัปเป็น **Lv.{new_lv}** แล้ว! มาร่วมยินดีกันเร็วทุกคน! ⚔️🔥"
-                                # )
+                                await target_channel.send(
+                                    f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมผจญภัยและพูดคุย ส่งผลให้คุณ {member.mention} "
+                                    f"เลเวลอัปเป็น **Lv.{new_lv}** แล้ว! มาร่วมยินดีกันเร็วทุกคน! ⚔️🔥"
+                                )
                                 print(f"📢 [LEVEL UP LOG] ประกาศเลเวลอัปของ {member.name} ลงห้อง {target_channel.name} สำเร็จ")
                             except Exception as e:
                                 print(f"⚠️ [LEVEL UP ERROR] ไม่สามารถส่งข้อความลงห้องได้เนื่องจาก: {e}")
