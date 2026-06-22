@@ -119,7 +119,7 @@ class VoiceChatTracker(commands.Cog):
                         "• นักผจญภัยแรงค์ SSS 👑"
                     ]
 
-                    # 🧠 ค้นหาข้อความในลิสต์ที่มีอักษร Rank (เช่น "แรงค์ F" หรือ "แรงค์ S") 
+                    # 🧠 ค้นหาข้อความในลิสต์ที่มีอักษร Rank
                     role_name = None
                     for r_name in rank_roles_names:
                         if f"แรงค์ {new_rank}" in r_name:
@@ -131,23 +131,19 @@ class VoiceChatTracker(commands.Cog):
                         role = discord.utils.get(current_guild.roles, name=role_name)
                         
                         if role:
-                            if is_rank_up or (role not in member.roles):
+                            # เงื่อนไขใหม่: แอดก็ต่อเมื่อ "ยังไม่มีแรงค์นั้น" เท่านั้น
+                            # ไม่ต้องสน is_rank_up เพราะเราต้องการเติมยศให้ครบในอดีตด้วย
+                            if role not in member.roles:
                                 try:
-                                    # # 🧹 ล้างยศเก่าที่เคยมีออกให้หมดก่อน เพื่อป้องกันสิทธิ์ทับซ้อน
-                                    # for old_role_name in rank_roles_names:
-                                    #     old_role = discord.utils.get(current_guild.roles, name=old_role_name)
-                                    #     if old_role and old_role in member.roles and old_role != role:
-                                    #         try: await member.remove_roles(old_role)
-                                    #         except: pass
-
-                                    # 🏅 สั่งแอดแจกยศล่าสุดเข้าไปแทนที่
                                     await member.add_roles(role)
-                                    print(f"🏅 [RANK SYNC/UP] -> แจกยศเริ่มต้น/อัปเดตยศ {role_name} ให้แก่ {member.name} สำเร็จ")
-                                    
+                                    print(f"🏅 [RANK SYNC] -> แจกยศ {role_name} ให้แก่ {member.name} สำเร็จ")
                                 except discord.Forbidden:
-                                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศในเซิร์ฟเวอร์: {current_guild.name} (กรุณาลากยศบอทให้อยู่สูงกว่ายศแรงค์)")
+                                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (ตรวจสอบลำดับยศบอทด้วย!)")
                                 except Exception as e:
-                                    print(f"⚠️ เกิดข้อผิดพลาดในการแจกยศห้องเสียง: {e}")
+                                    print(f"⚠️ เกิดข้อผิดพลาด: {e}")
+                            else:
+                                # ถ้ามีแล้ว ก็แค่ไม่ต้องทำอะไร (ข้ามไป)
+                                pass
     
     # ─── 💬 ระบบดักฟังช่องแชท แจกเงินเล็กน้อยเมื่อพิมพ์คุย (Text Chat Reward) ───
     @commands.Cog.listener()
