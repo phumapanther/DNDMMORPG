@@ -652,25 +652,38 @@ class PlayerCommands(commands.Cog):
     @not_arrested() # 🛠️ บล็อกคนติดคุก
     @commands.command(name="att")
     async def pvp_attack(self, ctx, member: discord.Member):
+        # 1. ป้องกันการตีตัวเอง
         if member.id == ctx.author.id:
             return await ctx.send("❌ คุณไม่สามารถเปิดฉากโจมตีตัวเองได้!")
+
+        # 2. เช็กสถานะผู้โจมตี (ต้องอยู่ในห้องเสียง)
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            return await ctx.send(f"❌ {ctx.author.mention} **การประลองถูกยกเลิก!** คุณต้องอยู่ในห้องเสียงก่อนถึงจะท้าดวลได้!")
+
+        # 3. เช็กสถานะเป้าหมาย (ต้องออนไลน์อยู่)
+        if member.status == discord.Status.offline:
+            return await ctx.send(f"⚠️ **ล้มเหลว!** เป้าหมาย {member.mention} ไม่ได้ออนไลน์อยู่! (ลูกผู้ชายเขาไม่ลอบโจมตีคนหลับกันหรอกนะ!)")
+        
+        # 4.เช็กว่าเป้าหมายต้องอยู่ในห้องเสียงด้วย
+        if not member.voice or not member.voice.channel:
+            return await ctx.send(f"⚠️ {member.mention} ไม่ได้อยู่ในห้องเสียง เลยท้าดวลไม่ได้นะ!")
 
         # โหลดข้อมูลผู้เล่นทั้งสองฝ่าย
         attacker = player_model.get_player(ctx.author.id)
         defender = player_model.get_player(member.id)
-
+        
         if not attacker or not defender:
             return await ctx.send("❌ ไม่พบข้อมูลตัวละครของฝ่ายใดฝ่ายหนึ่งในฐานข้อมูล!")
 
-        # 1. เช็กสถานะห้ามต่อสู้ (village หรือ death)
+        # 5. เช็กสถานะห้ามต่อสู้ (village หรือ death)
         if attacker.get("current_state") in ["village", "death"] or defender.get("current_state") in ["village", "death"]:
             return await ctx.send("❌ ไม่สามารถต่อสู้ได้เนื่องจากมีฝ่ายใดฝ่ายหนึ่งอยู่ในเซฟโซนหมู่บ้าน หรืออยู่ในสถานะเสียชีวิตแล้ว!")
 
-        # 2. เช็กเงื่อนไขเลเวลต่ำกว่า 20
+        # 6. เช็กเงื่อนไขเลเวลต่ำกว่า 20
         if attacker.get("level", 0) < 20 or defender.get("level", 0) < 20:
             return await ctx.send("❌ ระบบ PVP รองรับเฉพาะผู้กล้าเลเวล 20 ขึ้นไปเท่านั้น! (และห้ามรังแกผู้เล่นเลเวลต่ำกว่า 20)")
-
-        # 3. คำนวณความห่างของเลเวลเพื่อเพิ่มความยากในการทอย
+        
+        #คำนวณความห่างของเลเวลเพื่อเพิ่มความยากในการทอย
         lv_diff = attacker.get("level", 0) - defender.get("level", 0)
         
         # แต้มเต๋าพื้นฐาน 1-20 บวกรวมแต้มโบนัสตามระดับเลเวล
@@ -717,8 +730,8 @@ class PlayerCommands(commands.Cog):
             death_status_text = f"\n💀 **☠️ สิ้นชีพ!** พลังชีวิตของ {l_member.mention} หมดลงและเข้าสู่สถานะเสียชีวิต!"
             
             # --- 🏆 ระบบให้รางวัลผู้ชนะ ---
-            reward_exp = 100 + (loser.get("level", 1) * 50)  
-            reward_gold = 500 + (loser.get("level", 1) * 100) 
+            reward_exp = 100 + (loser.get("level", 1) * 1000)  
+            reward_gold = 500 + (loser.get("level", 1) * 500) 
             
             is_lvl_up, new_lvl, new_exp = player_model.add_exp(w_member.id, reward_exp)
             

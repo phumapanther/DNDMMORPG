@@ -119,32 +119,35 @@ class VoiceChatTracker(commands.Cog):
                         "• นักผจญภัยแรงค์ SSS 👑"
                     ]
 
-                    # 🧠 ค้นหาข้อความในลิสต์ที่มีอักษร Rank
+                    # 🧠 ค้นหาข้อความและ "ตำแหน่ง" ในลิสต์ที่มีอักษร Rank
                     role_name = None
-                    for r_name in rank_roles_names:
+                    target_index = -1 # เก็บตำแหน่งยศปัจจุบัน
+                    for i, r_name in enumerate(rank_roles_names):
                         if f"แรงค์ {new_rank}" in r_name:
                             role_name = r_name
+                            target_index = i # เจอแล้วว่ายศนี้อยู่ลำดับที่เท่าไหร่
                             break
 
-                    if role_name:
+                    if role_name and target_index != -1:
                         current_guild = member.guild
-                        role = discord.utils.get(current_guild.roles, name=role_name)
                         
-                        if role:
-                            # เงื่อนไขใหม่: แอดก็ต่อเมื่อ "ยังไม่มีแรงค์นั้น" เท่านั้น
-                            # ไม่ต้องสน is_rank_up เพราะเราต้องการเติมยศให้ครบในอดีตด้วย
-                            if role not in member.roles:
+                        # ✂️ ตัดลิสต์เอาเฉพาะยศที่เขามีสิทธิ์ได้ (ตั้งแต่ F จนถึงแรงค์ปัจจุบัน)
+                        allowed_roles = rank_roles_names[:target_index + 1]
+                        
+                        # ไล่แจกยศเฉพาะในลิสต์ที่ตัดมาแล้ว
+                        for r_name in allowed_roles:
+                            target_role = discord.utils.get(current_guild.roles, name=r_name)
+                            
+                            # ถ้ามียศนี้ในเซิร์ฟเวอร์ และ ผู้เล่นยังไม่มียศนี้
+                            if target_role and target_role not in member.roles:
                                 try:
-                                    await member.add_roles(role)
-                                    print(f"🏅 [RANK SYNC] -> แจกยศ {role_name} ให้แก่ {member.name} สำเร็จ")
+                                    await member.add_roles(target_role)
+                                    print(f"🏅 [RANK SYNC] -> เติมยศ {r_name} ให้แก่ {member.name}")
                                 except discord.Forbidden:
-                                    print(f"❌ บอทไม่มีสิทธิ์จัดการยศ (ตรวจสอบลำดับยศบอทด้วย!)")
+                                    print(f"❌ [RANK ERROR] บอทไม่มีสิทธิ์แอดมิน หรือยศบอทอยู่ต่ำกว่ายศ {r_name}")
                                 except Exception as e:
-                                    print(f"⚠️ เกิดข้อผิดพลาด: {e}")
-                            else:
-                                # ถ้ามีแล้ว ก็แค่ไม่ต้องทำอะไร (ข้ามไป)
-                                pass
-    
+                                    print(f"⚠️ [RANK ERROR] ไม่สามารถแจกยศได้: {e}")
+                            
     # ─── 💬 ระบบดักฟังช่องแชท แจกเงินเล็กน้อยเมื่อพิมพ์คุย (Text Chat Reward) ───
     @commands.Cog.listener()
     async def on_message(self, message):
