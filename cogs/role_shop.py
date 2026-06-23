@@ -14,10 +14,10 @@ DARK_ROLES = [
     {"label": "• Asmodeus🕯️", "value": "asmo", "price": 20000000, "role_id": 1160576018508152912, "emoji": "🕯️"},
     {"label": "• Beelzebub 🪰", "value": "beel", "price": 20000000, "role_id": 1160577870251425965, "emoji": "🪰"},
     {"label": "• Mammon 🪙", "value": "mammon", "price": 20000000, "role_id": 1160576329079595079, "emoji": "🪙"},
-    {"label": "• Belphegor 🦥", "value": "belphe", "price": 20000000, "role_id": 1510346403044655124, "emoji": "🦥"},
-    {"label": "• Satan 𖤐", "value": "satan", "price": 20000000, "role_id": 1510346894558105680, "emoji": "𖤐"},
+    {"label": "• Belphegor 🦥", "value": "belphe", "price": 20000000, "role_id": 1510346403044655124, "emoji": None},
+    {"label": "• Satan 𖤐", "value": "satan", "price": 20000000, "role_id": 1510346894558105680, "emoji": None},
     {"label": "• Leviathan 🐍", "value": "levi", "price": 20000000, "role_id": 1510347065492901918, "emoji": "🐍"},
-    {"label": "• Lucifer ⸸", "value": "luci", "price": 20000000, "role_id": 1510347144207401140, "emoji": "⸸"},
+    {"label": "• Lucifer ⸸", "value": "luci", "price": 20000000, "role_id": 1510347144207401140, "emoji": None},
 ]
 
 # ==========================================
@@ -43,12 +43,13 @@ async def process_role_purchase(interaction: discord.Interaction, selected_value
     role_info = next((r for r in role_list if r["value"] == selected_value), None)
     if not role_info:
         return await interaction.response.send_message("❌ ไม่พบข้อมูลยศนี้ในระบบ!", ephemeral=True)
-
+    print(f"[DEBUG] process_role_purchase กำลังทำงาน") 
     role_id = role_info["role_id"]
     price = role_info["price"]
     role_name = role_info["label"]
-
+    print(f"[DEBUG] ก่อนโลหด ole Object") 
     role_obj = interaction.guild.get_role(role_id)
+    print(f"[DEBUG] Role Object Found: {role_obj}") # เพิ่มบรรทัดนี้
     if not role_obj:
         return await interaction.response.send_message("❌ แอดมินยังไม่ได้ตั้งค่า Role ID ให้ถูกต้อง!", ephemeral=True)
 
@@ -120,6 +121,7 @@ async def process_role_gacha(interaction: discord.Interaction, role_list: list, 
 # 🛒 UI (Dropdown + ปุ่ม Gacha)
 # ==========================================
 class DarkRoleSelect(discord.ui.Select):
+    print(f"[DEBUG] DarkRoleSelect ทำงานแล้ง")
     def __init__(self):
         options = [discord.SelectOption(label=r["label"], value=r["value"], description=f"ราคา: {r['price']:,} ทอง", emoji=r.get("emoji")) for r in DARK_ROLES]
         super().__init__(placeholder="🩸 เลือกซื้อพลังแห่งความมืด (จ่ายเต็ม)...", min_values=1, max_values=1, options=options)
@@ -136,11 +138,12 @@ class LightRoleSelect(discord.ui.Select):
         await process_role_purchase(interaction, self.values[0], LIGHT_ROLES)
 
 class DarkShopView(discord.ui.View):
+    print(f"[DEBUG] DarkShopView ทำงานแล้ง")
     def __init__(self, user):
         super().__init__(timeout=120)
         self.user = user
         self.add_item(DarkRoleSelect())
-
+    print(f"[DEBUG] DarkShopView กำลีงทำงาน")
     @discord.ui.button(label="🎲 สุ่มยศ 7 บาป (10,000,000 ทอง)", style=discord.ButtonStyle.danger, emoji="🎰", row=1)
     async def btn_gacha_dark(self, interaction: discord.Interaction, button: discord.ui.Button):
         await process_role_gacha(interaction, DARK_ROLES, "ฝ่ายความมืด")
@@ -178,12 +181,18 @@ class RoleShop(commands.Cog):
     @commands.command(name="darkshop")
     @not_arrested()
     async def open_dark_shop(self, ctx):
-        embed = discord.Embed(
-            title="🩸 ร้านค้ายศฝ่ายความมืด (Dark Faction)", 
-            description="อุทิศวิญญาณแลกกับพลังอำนาจ...\n\nคุณสามารถ **เลือกซื้อจ่ายเต็ม** จากเมนูด้านล่าง\nหรือกดปุ่ม 🎲 **สุ่มกาชา 10M** เพื่อลุ้นรับยศระดับ 20M แบบสุ่ม (ระวังเกลือได้ซ้ำ!)", 
-            color=discord.Color.dark_red()
-        )
-        await ctx.send(embed=embed, view=DarkShopView(ctx.author))
+        try:
+            print("[DEBUG] กำลังสร้าง Embed และ View...")
+            embed = discord.Embed(
+                title="🩸 ร้านค้ายศฝ่ายความมืด (Dark Faction)", 
+                description="...", 
+                color=discord.Color.dark_red()
+            )
+            view = DarkShopView(ctx.author)
+            await ctx.send(embed=embed, view=view)
+            print("[DEBUG] ส่งข้อความสำเร็จ")
+        except Exception as e:
+            print(f"[ERROR] พังตรงนี้: {e}")
 
     @allowed_channels(["💸ซื้อยศออโต้💸"]) 
     @commands.command(name="lightshop")

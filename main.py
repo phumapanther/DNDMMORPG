@@ -124,7 +124,7 @@ def create_bot(bot_type: str):
                 print("💸[Buy] โหลดระบบคำสั่ง ซื้อยศออนไลน์!")
 
             elif bot_type == "chat":
-                # await bot.load_extension("cogs.voice_chat_tracker")
+                await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Chat/Voice Bot] โหลดระบบลูปห้องเสียงและฟาร์มแชทสำเร็จ!")
                 
             elif bot_type == "admin":
