@@ -1,3 +1,4 @@
+#controller/bot_brain
 import random
 from controller.bot_brain import BlackjackBot
 from controller import db_manager
@@ -13,29 +14,31 @@ def train_alpha_bot(iterations=5000):
     print(f"[LOG] [TRAINER] พบข้อมูลเก่า {original_size} รายการ")
     
     for i in range(iterations):
-        # จำลองสถานการณ์ (State)
-        p_score = random.randint(4, 24) # ขยายช่วงให้ครอบคลุมดาต้าเดิม
+        p_score = random.randint(4, 24)
         d_upcard = random.randint(1, 10)
+        
+        # จำลองการจั่ว (อย่าใส่ตรรกะรางวัลเอง ให้ใช้ของบอท)
         action = bot.get_action(p_score, d_upcard, epsilon=0.3)
         
-        # บอทตัดสินใจ (ให้สุ่มเยอะหน่อยในช่วงแรกด้วย epsilon=0.5)
-        action = bot.get_action(p_score, d_upcard, epsilon=0.5)
-        
-        # เงื่อนไขการให้คะแนน (Reward Logic)
-        reward = 0
+        # จำลองผลลัพธ์แบบสุ่ม
         if action == "!hit":
-            if p_score + random.randint(1, 10) > 24:
-                reward = -1.0 # โดนทำโทษ (Bust)
+            final_score = p_score + random.randint(1, 10)
+            if final_score > 24:
+                reward = bot.calculate_reward('bust', final_score)
             else:
-                reward = 0.2 # ได้รางวัลนิดหน่อยที่จั่วแล้วไม่เกิน
-        else: # Stand (!c)
-            if p_score > 18: 
-                reward = 0.8 # ชมเชยที่พอในแต้มที่ดี
+                # ถ้าจั่วแล้วไม่เกิน ให้ Reward กลางๆ (หรือจะข้ามไปก็ได้)
+                reward = 0.0 
+        else:
+            # จำลองสถานการณ์ Stand แล้วลุ้นแต้มเจ้ามือ
+            dealer_score = random.randint(15, 24)
+            if p_score > dealer_score:
+                reward = bot.calculate_reward('win', p_score)
+            elif p_score == dealer_score:
+                reward = bot.calculate_reward('tie', p_score)
             else:
-                reward = -0.5 # ทำโทษที่พอในแต้มที่น้อยเกินไป
-        
-        # สั่งให้บอทเรียนรู้จากผลลัพธ์
-        bot.learn(p_score, d_upcard, action, reward)
+                reward = bot.calculate_reward('lose', p_score)
+
+        bot.learn(f"{p_score}-{d_upcard}", action, reward)
         
         if (i + 1) % 1000 == 0:
             print(f"[LOG] [TRAINER] ⚙️ เทรนไปแล้ว {i+1} รอบ...")

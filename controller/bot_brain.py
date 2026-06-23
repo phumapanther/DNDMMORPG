@@ -1,3 +1,4 @@
+#controller/bot_brain
 import sys
 import os
 import random
@@ -49,17 +50,26 @@ class BlackjackBot:
         else:
             return "!hit" # Hit (จั่ว)
 
-    # ฟังก์ชันนี้ไว้ให้บอท "เรียนรู้" หลังจบเกม (Train)
-    def learn(self, player_score, dealer_upcard, action, reward):
-        state = f"{player_score}-{dealer_upcard}"
-        
+
+    def calculate_reward(self, result_type, p_score, b_score=None):
+        """
+        รวมกฎการให้รางวัลไว้ที่เดียว เพื่อป้องกันบอทสับสน
+        result_type: 'bust', 'win', 'lose', 'tie'
+        """
+        if result_type == 'bust': return -1.0
+        if result_type == 'win': return 1.0
+        if result_type == 'lose': return -1.0
+        if result_type == 'tie': return 0.1
+        return 0.0
+
+    def learn(self, state, action, reward):
         # จัดการ Index ให้ตรงกับข้อมูล: 0 = Stand (!c), 1 = Hit (!hit)
         action_idx = 1 if action == "!hit" else 0
         
-        # ป้องกันกรณีเกิด State ใหม่ตอนเรียนรู้ (เผื่อตอน get_action ไม่ทันได้บันทึก)
+        # ป้องกันกรณีเกิด State ใหม่
         if state not in self.q_table:
             self.q_table[state] = [0.0, 0.0]
             
-        # สูตรอัปเดตสมอง: นำค่าเดิม + อัตราการเรียนรู้ (0.1) * (ผลตอบแทน - ค่าเดิม)
         old_value = self.q_table[state][action_idx]
+        # สูตรอัปเดตสมอง
         self.q_table[state][action_idx] = old_value + 0.1 * (reward - old_value)

@@ -1,9 +1,10 @@
+#cogs/bj24 สำหรับผู้เล่น
 import discord
 from discord.ext import commands
 import random
 import json
-from utils import has_role_or_owner, allowed_channels, not_arrested
-
+from utils import not_arrested, allowed_channels,has_role_or_owner
+from controller.trainer import train_alpha_bot
 # นำเข้าระบบจัดการผู้เล่นของคุณอาเธอร์
 import models.player_model as player_model
 
@@ -86,11 +87,11 @@ class BJ24View(discord.ui.View):
             print(f"[LOG] [BJ24_HIT] {self.user.display_name} จั่วไพ่ได้ [{drawn_card[0]}] | แต้มรวมตอนนี้: {p_score}")
             
             if p_score > 24:
-                print(f"[LOG] [BJ24_BUST] 💥 {self.user.display_name} แต้มเกิน 24 (Bust) แพ้ทันที!")
-                # ผู้เล่น Bust (แพ้)
-                reward = 1 # บอทชนะ
-                # ให้บอทเรียนรู้จากความผิดพลาดของผู้เล่น
+                reward = 1
                 self.brain.learn(self.get_score(self.bot_hand), self.player_hand[0][1], "!c", reward)
+                # เอา self.save_bot_memory() ออกจากตรงนี้
+                
+                result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
                 self.save_bot_memory()
                 
                 result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
@@ -166,8 +167,15 @@ class BJ24View(discord.ui.View):
 
             # 🧠 สอนบอทตาม History ในตานี้
             print(f"[LOG] [BJ24_LEARNING] 🧠 เริ่มกระบวนการอัปเดต Q-Table ของ AlphaBot...")
+            # ดึงไพ่ใบแรกของเจ้ามือมาเป็นตัวอ้างอิง
+            dealer_upcard = self.bot_hand[0][1] 
+            
             for score, act in bot_history:
-                self.brain.learn(score, self.player_hand[0][1], act, reward)
+                # รวม score และ dealer_upcard เป็น String (State)
+                state = f"{score}-{dealer_upcard}"
+                # ส่งค่าเข้าไป 3 ค่า (self ไม่นับ) ตามฟังก์ชัน learn ตัวใหม่
+                self.brain.learn(state, act, reward)
+            
             self.save_bot_memory()
 
             embed = self.generate_embed(game_over=True, result_text=result_text, color=color)
@@ -194,40 +202,55 @@ class BJ24View(discord.ui.View):
 class BJ24Game(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # เตรียมสมองบอทไว้ตอนเปิดรัน Cog
-        try:
-            self.bot_brain = BlackjackBot()
-            print(f"[LOG] [BJ24_INIT] ✅ โหลดโมดูลเกมไพ่และสมองกล AlphaBot สำเร็จพร้อมใช้งาน")
-        except Exception as e:
-            self.bot_brain = None
-            print(f"[ERROR] [BJ24_INIT] ⚠️ โหลด AlphaBot ไม่สำเร็จ: {e}")
+        self.bot_brain = BlackjackBot()
 
-    @has_role_or_owner("คนบ้า")
-    @allowed_channels(["🃏blackjack🃏"]) # 🛠️ ใช้ Decorator บล็อกห้อง
-    @not_arrested() # 🛠️ บล็อกคนติดคุก
-    @commands.command(name="train")
-    @commands.has_permissions(administrator=True) # ป้องกันไม่ให้คนทั่วไปมาสั่งเทรน
-    async def train_bot(self, ctx, iterations: int = 1000):
-        """คำสั่งเทรนบอท: !train 5000"""
-        await ctx.send(f"🤖 กำลังเริ่มกระบวนการฝึกสมอง AlphaBot จำนวน {iterations} รอบ... โปรดรอสักครู่ครับ!")
-        
+    # --- คำสั่งเล่นเกม ---
+    @allowed_channels(["🃏blackjack🃏"])
+    @not_arrested()
+    @commands.command(name="bj")
+    async def play_bj(self, ctx, bet: int):
         try:
-            # นำเข้าฟังก์ชันเทรนมาใช้
-            from controller.trainer import train_alpha_bot
+            print(f"[LOG] [BJ_COMMAND] {ctx.author.name} เริ่มเกมด้วยเงิน {bet}")
+
+            # 1. ตรวจสอบสมองบอท
+            if not self.bot_brain:
+                return await ctx.send("❌ ระบบสมองกล (ML) ออฟไลน์ โปรดแจ้งแอดมิน!")
+
+            # 2. ตรวจสอบเงินเดิมพัน
+            if bet <= 0:
+                return await ctx.send("❌ เดิมพันต้องมากกว่า 0 ทอง!")
             
-            # รันการเทรน
-            train_alpha_bot(iterations)
+            player = player_model.get_player(ctx.author.id)
+            if not player or player.get("cash", 0) < bet:
+                return await ctx.send("❌ เงินในกระเป๋าของคุณไม่พอ!")
+
+            # 3. หักเงินและเริ่มเกม
+            player_model.increment_player_field(ctx.author.id, "cash", -bet)
             
-            # โหลดสมองที่เทรนเสร็จใหม่ๆ เข้าบอทตัวที่รันอยู่ทันที
-            self.bot_brain = BlackjackBot() 
+            # เริ่มเกม
+            view = BJ24View(ctx.author, bet, self.bot_brain)
+            embed = view.generate_embed()
             
-            await ctx.send(f"✅ ฝึกสมอง AlphaBot สำเร็จแล้ว! บอทได้เรียนรู้ประสบการณ์ใหม่เพิ่มขึ้น {iterations} รอบ")
+            msg = await ctx.send(embed=embed, view=view)
+            view.message = msg # จำเป็นสำหรับ on_timeout
+            
         except Exception as e:
-            await ctx.send(f"❌ เกิดข้อผิดพลาดในการเทรน: {e}")
+            print(f"[ERROR] [BJ_COMMAND] {e}")
+            await ctx.send("❌ เกิดข้อผิดพลาดในการเริ่มเกม!")
+
+    # --- คำสั่งเทรนบอท (Admin Only) ---
+    @has_role_or_owner("คนบ้า")
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="train")
+    async def train_bot(self, ctx, iterations: int = 1000):
+        await ctx.send(f"🤖 กำลังฝึกสมอง AlphaBot {iterations} รอบ...")
+        try:
+            train_alpha_bot(iterations)
+            # รีโหลดสมองใหม่
+            self.bot_brain = BlackjackBot()
+            await ctx.send(f"✅ ฝึกเสร็จสิ้น! บอทฉลาดขึ้นแล้ว")
+        except Exception as e:
+            await ctx.send(f"❌ เทรนล้มเหลว: {e}")
 
 async def setup(bot):
-    try:
-        await bot.add_cog(BJ24Game(bot))
-        print(f"[LOG] [SETUP] ติดตั้ง Cog BJ24 เข้ากับระบบหลักสมบูรณ์")
-    except Exception as e:
-        print(f"[ERROR] [SETUP_BJ24] โหลด BJ24 ล้มเหลว: {e}")
+    await bot.add_cog(BJ24Game(bot))

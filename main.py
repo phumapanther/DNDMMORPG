@@ -117,16 +117,12 @@ def create_bot(bot_type: str):
                 await bot.load_extension("cogs.casino")
                 print("🎰[Casino] โหลดระบบคำสั่ง casino สำเร็จ!")
 
-                await bot.load_extension("cogs.bj24")
-                print("🃏[bj24] โหลดระบบคำสั่ง bj24!")
+                await bot.load_extension("cogs.blackjack")
+                print("🃏[Blackjack Commands] โหลดระบบคำสั่ง เทรนบอท blackjack ")
 
                 await bot.load_extension("cogs.role_shop")
                 print("💸[Buy] โหลดระบบคำสั่ง ซื้อยศออนไลน์!")
 
-                await bot.load_extension("cogs.blackjack")
-                print("💸[World Boss Commands] โหลดระบบคำสั่ง เทรนบอท blackjack ")
-                
-                
             elif bot_type == "chat":
                 # await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Chat/Voice Bot] โหลดระบบลูปห้องเสียงและฟาร์มแชทสำเร็จ!")
