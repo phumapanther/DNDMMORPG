@@ -8,11 +8,15 @@ def train_alpha_bot(iterations=5000):
     
     # โหลดสมองบอท
     bot = BlackjackBot()
+
+    original_size = len(bot.q_table)
+    print(f"[LOG] [TRAINER] พบข้อมูลเก่า {original_size} รายการ")
     
     for i in range(iterations):
         # จำลองสถานการณ์ (State)
-        p_score = random.randint(12, 24)
+        p_score = random.randint(4, 24) # ขยายช่วงให้ครอบคลุมดาต้าเดิม
         d_upcard = random.randint(1, 10)
+        action = bot.get_action(p_score, d_upcard, epsilon=0.3)
         
         # บอทตัดสินใจ (ให้สุ่มเยอะหน่อยในช่วงแรกด้วย epsilon=0.5)
         action = bot.get_action(p_score, d_upcard, epsilon=0.5)
@@ -39,7 +43,9 @@ def train_alpha_bot(iterations=5000):
     # บันทึกความจำลงฐานข้อมูลหลังจากเทรนเสร็จ
     memory_json = json.dumps(bot.q_table)
     db_manager.save_bot_memory(memory_json, 'AlphaBot')
-    print(f"[LOG] [TRAINER] ✅ เทรนบอทสำเร็จและบันทึกความจำลง Database เรียบร้อย!")
+
+    new_size = len(bot.q_table)
+    print(f"[LOG] [TRAINER] ✅ เสร็จสิ้น! ขนาดดาต้า: {original_size} -> {new_size}")
 
 if __name__ == "__main__":
     train_alpha_bot(5000)

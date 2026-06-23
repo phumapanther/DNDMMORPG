@@ -86,11 +86,11 @@ class BJ24View(discord.ui.View):
             print(f"[LOG] [BJ24_HIT] {self.user.display_name} จั่วไพ่ได้ [{drawn_card[0]}] | แต้มรวมตอนนี้: {p_score}")
             
             if p_score > 24:
-                print(f"[LOG] [BJ24_BUST] 💥 {self.user.display_name} แต้มเกิน 24 (Bust) แพ้ทันที!")
-                # ผู้เล่น Bust (แพ้)
-                reward = 1 # บอทชนะ
-                # ให้บอทเรียนรู้จากความผิดพลาดของผู้เล่น
+                reward = 1
                 self.brain.learn(self.get_score(self.bot_hand), self.player_hand[0][1], "!c", reward)
+                # เอา self.save_bot_memory() ออกจากตรงนี้
+                
+                result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
                 self.save_bot_memory()
                 
                 result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
