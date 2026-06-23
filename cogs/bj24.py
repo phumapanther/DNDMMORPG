@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import random
 import json
+from utils import not_arrested, allowed_channels
 
 # นำเข้าระบบจัดการผู้เล่นของคุณอาเธอร์
 import models.player_model as player_model
@@ -201,6 +202,8 @@ class BJ24Game(commands.Cog):
             self.bot_brain = None
             print(f"[ERROR] [BJ24_INIT] ⚠️ โหลด AlphaBot ไม่สำเร็จ: {e}")
 
+    @allowed_channels(["🃏Blackjack🃏"]) # 🛠️ ใช้ Decorator บล็อกห้อง
+    @not_arrested() # 🛠️ บล็อกคนติดคุก
     @commands.command(name="bj")
     async def play_bj(self, ctx, bet: int):
         try:
