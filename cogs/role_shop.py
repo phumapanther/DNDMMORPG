@@ -70,37 +70,52 @@ async def process_role_purchase(interaction: discord.Interaction, selected_value
         await interaction.response.send_message("❌ บอทไม่มีสิทธิ์มอบยศนี้ให้คุณได้ (กรุณาให้แอดมินเลื่อนยศของบอท)", ephemeral=True)
 
 # ==========================================
-# 🎲 ฟังก์ชันสุ่มยศ (กาชาปอง)
+# 🎲 ฟังก์ชันสุ่มยศ (กาชาปอง) - เวอร์ชันอัปเดตความแม่นยำ
 # ==========================================
 async def process_role_gacha(interaction: discord.Interaction, role_list: list, faction_name: str):
     GACHA_PRICE = 10000000 # ราคา 10M
     
+    # ดึงข้อมูลผู้เล่นจากฐานข้อมูล
     player = player_model.get_player(interaction.user.id)
     current_cash = player.get("cash", 0) if player else 0
 
     if current_cash < GACHA_PRICE:
         return await interaction.response.send_message(f"❌ เงินของคุณไม่พอสุ่มกาชา! ต้องใช้ `{GACHA_PRICE:,}` ทอง (คุณมี `{current_cash:,}` ทอง)", ephemeral=True)
 
+    # กรองเฉพาะยศที่มีราคา 20,000,000 มาใส่ตู้กาชา
     gacha_pool = [r for r in role_list if r["price"] == 20000000]
     
+    # หักเงินทันที
     player_model.increment_player_field(interaction.user.id, "cash", -GACHA_PRICE)
     
+    # สุ่มยศ
     won_role = random.choice(gacha_pool)
     role_obj = interaction.guild.get_role(won_role["role_id"])
-
+    
     if not role_obj:
         return await interaction.response.send_message("❌ ระบบขัดข้อง: ไม่พบข้อมูลยศที่สุ่มได้ในดิสคอร์ด", ephemeral=True)
 
-    if role_obj in interaction.user.roles:
-        await interaction.response.send_message(f"🎲 {interaction.user.mention} จ่าย `{GACHA_PRICE:,}` ทอง หมุนกาชา {faction_name}...\n💀 **เกลือ!!** คุณสุ่มได้ยศ **{won_role['label']}** ซึ่งคุณมีอยู่แล้ว!")
+    # 🛠️ ใช้ fetch_member เพื่อให้ได้สถานะ Role ที่อัปเดตที่สุดจาก Server
+    member = await interaction.guild.fetch_member(interaction.user.id)
+
+    if role_obj in member.roles:
+        # กรณีสุ่มได้ของซ้ำ
+        await interaction.response.send_message(
+            f"🎲 {interaction.user.mention} จ่าย `{GACHA_PRICE:,}` ทอง หมุนกาชา {faction_name}...\n"
+            f"💀 **เกลือ!!** คุณสุ่มได้ยศ **{won_role['label']}** ซึ่งคุณมีอยู่แล้ว!"
+        )
     else:
+        # กรณีได้ของใหม่
         try:
             await interaction.user.add_roles(role_obj)
-            await interaction.response.send_message(f"🎲 {interaction.user.mention} จ่าย `{GACHA_PRICE:,}` ทอง หมุนกาชา {faction_name}...\n🎉 **แจ็คพอตแตก!!** คุณได้รับยศ **{won_role['label']}** ยินดีด้วย!!")
+            await interaction.response.send_message(
+                f"🎲 {interaction.user.mention} จ่าย `{GACHA_PRICE:,}` ทอง หมุนกาชา {faction_name}...\n"
+                f"🎉 **แจ็คพอตแตก!!** คุณได้รับยศ **{won_role['label']}** ยินดีด้วย!!"
+            )
         except discord.Forbidden:
+            # กรณีบอทไม่มีสิทธิ์แจกยศ
             player_model.increment_player_field(interaction.user.id, "cash", GACHA_PRICE)
             await interaction.response.send_message("❌ บอทไม่มีสิทธิ์มอบยศนี้ให้คุณได้ (คืนเงินแล้ว)", ephemeral=True)
-
 # ==========================================
 # 🛒 UI (Dropdown + ปุ่ม Gacha)
 # ==========================================
@@ -159,7 +174,7 @@ class RoleShop(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @allowed_channels(["😈ซื้อยศเซ็ทจอมมาร♕"]) 
+    @allowed_channels(["💸ซื้อยศออโต้💸"]) 
     @commands.command(name="darkshop")
     @not_arrested()
     async def open_dark_shop(self, ctx):
@@ -170,7 +185,7 @@ class RoleShop(commands.Cog):
         )
         await ctx.send(embed=embed, view=DarkShopView(ctx.author))
 
-    @allowed_channels(["🪶ซื้อยศเซ็ทเทพ♔"]) 
+    @allowed_channels(["💸ซื้อยศออโต้💸"]) 
     @commands.command(name="lightshop")
     @not_arrested()
     async def open_light_shop(self, ctx):

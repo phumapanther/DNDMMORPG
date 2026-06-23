@@ -87,41 +87,48 @@ def create_bot(bot_type: str):
         try:
             # 🔄 [โหมดบายพาส] ถ้าเป็นบอทเกม (Arthur) ให้โหลดทั้งระบบเกม, ระบบแอดมิน และระบบเสียงควบรวมกันเลย!
             if bot_type == "game":
-                await bot.load_extension("cogs.game_commands")
-                print("⚔️ [Game Bot] โหลดระบบคำสั่งคอมแบทและร้านค้าสำเร็จ!")
+                # await bot.load_extension("cogs.game_commands")
+                # print("⚔️ [Game Bot] โหลดระบบคำสั่งคอมแบทและร้านค้าสำเร็จ!")
                 
-                await bot.load_extension("cogs.admin_commands")
-                print("👑 [Admin Commands] โหลดระบบคำสั่งผู้ดูแลระบบสำเร็จ!")
+                # await bot.load_extension("cogs.admin_commands")
+                # print("👑 [Admin Commands] โหลดระบบคำสั่งผู้ดูแลระบบสำเร็จ!")
 
-                await bot.load_extension("cogs.player_commands")
-                print("🕺[Player Commands] โหลดระบบคำสั่งผู้เล่นสำเร็จ!")
+                # await bot.load_extension("cogs.player_commands")
+                # print("🕺[Player Commands] โหลดระบบคำสั่งผู้เล่นสำเร็จ!")
 
-                await bot.load_extension("cogs.voice_chat_tracker")
-                print("🎙️ [Bypass Mode] โน้ตระบบลูปห้องเสียงและฟาร์มแชทมาให้ Arthur รันแทนชั่วคราวสำเร็จ!")
+                # await bot.load_extension("cogs.voice_chat_tracker")
+                # print("🎙️ [Bypass Mode] โน้ตระบบลูปห้องเสียงและฟาร์มแชทมาให้ Arthur รันแทนชั่วคราวสำเร็จ!")
                 
-                await bot.load_extension('cogs.owner_announce')
-                print("📢 [Owner Announce] โหลดระบบประกาศข่าวสารสำเร็จ!")
+                # await bot.load_extension('cogs.owner_announce')
+                # print("📢 [Owner Announce] โหลดระบบประกาศข่าวสารสำเร็จ!")
 
-                await bot.load_extension('cogs.adventure_zone')
-                print("🌌 [Adventure Zone] โหลดระบบห้องผจญภัยส่วนตัวสำเร็จ!")
+                # await bot.load_extension('cogs.adventure_zone')
+                # print("🌌 [Adventure Zone] โหลดระบบห้องผจญภัยส่วนตัวสำเร็จ!")
 
-                await bot.load_extension("cogs.private_room")
-                print("🏠 [Private Room Bot] โหลดระบบคำสั่ง สร้างห้อง สำเร็จ!")
+                # await bot.load_extension("cogs.private_room")
+                # print("🏠 [Private Room Bot] โหลดระบบคำสั่ง สร้างห้อง สำเร็จ!")
                 
-                await bot.load_extension("cogs.pvp_duel")
-                print("⚔️ [PVP Commands] โหลดระบบคำสั่ง PVP สำเร็จ!")
+                # await bot.load_extension("cogs.pvp_duel")
+                # print("⚔️ [PVP Commands] โหลดระบบคำสั่ง PVP สำเร็จ!")
 
-                await bot.load_extension("cogs.world_boss")
-                print("👿[World Boss Commands] โหลดระบบคำสั่ง Boss สำเร็จ!")
+                # await bot.load_extension("cogs.world_boss")
+                # print("👿[World Boss Commands] โหลดระบบคำสั่ง Boss สำเร็จ!")
 
-                await bot.load_extension("cogs.casino")
-                print("🎰[World Boss Commands] โหลดระบบคำสั่ง casino สำเร็จ!")
+                # await bot.load_extension("cogs.casino")
+                # print("🎰[World Boss Commands] โหลดระบบคำสั่ง casino สำเร็จ!")
 
-                await bot.load_extension("cogs.bj24")
-                print("🃏[World Boss Commands] โหลดระบบคำสั่ง bj24!")
+                # await bot.load_extension("cogs.bj24")
+                # print("🃏[World Boss Commands] โหลดระบบคำสั่ง bj24!")
+
+                # await bot.load_extension("cogs.role_shop")
+                # print("💸[World Boss Commands] โหลดระบบคำสั่ง ซื้อยศออนไลน์!")
+
+                await bot.load_extension("cogs.blackjack")
+                print("💸[World Boss Commands] โหลดระบบคำสั่ง เทรนบอท blackjack ")
+                
                 
             elif bot_type == "chat":
-                await bot.load_extension("cogs.voice_chat_tracker")
+                # await bot.load_extension("cogs.voice_chat_tracker")
                 print("🎙️ [Chat/Voice Bot] โหลดระบบลูปห้องเสียงและฟาร์มแชทสำเร็จ!")
                 
             elif bot_type == "admin":

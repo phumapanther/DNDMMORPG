@@ -90,10 +90,30 @@ class VoiceChatTracker(commands.Cog):
                         if target_channel:
                             try:
                                 # ส่งข้อความแท็กเรียกผู้เล่นประกาศความสำเร็จลงห้องที่กำหนด
-                                await target_channel.send(
-                                    f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมผจญภัยและพูดคุย ส่งผลให้คุณ {member.mention} "
-                                    f"เลเวลอัปเป็น **Lv.{new_lv}** แล้ว! มาร่วมยินดีกันเร็วทุกคน! ⚔️🔥"
+                                # await target_channel.send(
+                                #     f"✨🎉 **LEVEL UP!!** แต้มจากการร่วมผจญภัยและพูดคุย ส่งผลให้คุณ {member.mention} "
+                                #     f"เลเวลอัปเป็น **Lv.{new_lv}** แล้ว! มาร่วมยินดีกันเร็วทุกคน! ⚔️🔥"
+                                # )
+                                # สร้าง Embed object
+                                embed = discord.Embed(
+                                    title=f"{member.display_name} 💠 {new_lv}",
+                                    description=(
+                                        "♛—————«•🪬•»—————♛\n"
+                                        f"✛ บรรณารักษ์: โอ๊ะ!! ท่านได้รับการเลื่อนระดับแล้ว เป็นไงบ้างล่ะๆ\n"
+                                        "⊚—————«•⏳♟️•»—————⊚\n"
+                                        "✛ ถ้ายังไงท่านสามารถสำรวจป่าต่างๆ\n"
+                                        "แล้วมารับตราประทับกับข้าได้ตอนระดับของพวกท่านสูงขึ้นขอให้โชคดี\n"
+                                        "⩬«—————❄️✴️❄️—————»⩬"
+                                    ),
+                                    color=discord.Color.blue() # หรือสีที่คุณต้องการ
                                 )
+
+                                # ดึงรูปโปรไฟล์ผู้เล่นมาใส่ที่มุมขวา (เหมือนในภาพ)
+                                embed.set_thumbnail(url=member.display_avatar.url)
+
+                                # ส่ง Embed เข้าไปในช่องแชท
+                                await target_channel.send(embed=embed)
+                                
                                 print(f"📢 [LEVEL UP LOG] ประกาศเลเวลอัปของ {member.name} ลงห้อง {target_channel.name} สำเร็จ")
                             except Exception as e:
                                 print(f"⚠️ [LEVEL UP ERROR] ไม่สามารถส่งข้อความลงห้องได้เนื่องจาก: {e}")
