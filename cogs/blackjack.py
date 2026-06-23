@@ -78,6 +78,7 @@ class BJ24View(discord.ui.View):
             print(f"[ERROR] [BJ24_TIMEOUT] แก้ไขข้อความตอนหมดเวลาไม่ได้: {e}")
 
     # --- ปุ่ม Hit (จั่วไพ่) ---
+    # --- ปุ่ม Hit (จั่วไพ่) ---
     @discord.ui.button(label="👇 Hit (จั่ว)", style=discord.ButtonStyle.primary, custom_id="bj_hit")
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
@@ -88,10 +89,14 @@ class BJ24View(discord.ui.View):
             
             if p_score > 24:
                 reward = 1
-                self.brain.learn(self.get_score(self.bot_hand), self.player_hand[0][1], "!c", reward)
-                # เอา self.save_bot_memory() ออกจากตรงนี้
                 
-                result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
+                # --- แก้ไขตรงนี้: สร้าง state ก่อนเรียก learn ---
+                state = f"{self.get_score(self.bot_hand)}-{self.player_hand[0][1]}"
+                
+                # เรียก learn ด้วย 3 arguments (state, action, reward)
+                self.brain.learn(state, "!c", reward)
+                # ---------------------------------------------
+                
                 self.save_bot_memory()
                 
                 result_text = f"💥 **เกิน 24! (Bust)** คุณแพ้และเสียเงินเดิมพัน `{self.bet}` ทอง!"
@@ -107,7 +112,6 @@ class BJ24View(discord.ui.View):
         except Exception as e:
             print(f"[ERROR] [BJ24_HIT] บัคขณะผู้เล่นกดจั่วไพ่: {e}")
             await interaction.response.send_message("❌ เกิดข้อผิดพลาดของระบบไพ่!", ephemeral=True)
-
     # --- ปุ่ม Stand (พอ) และ ตาของบอท ---
     @discord.ui.button(label="✋ Stand (พอ)", style=discord.ButtonStyle.success, custom_id="bj_stand")
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):

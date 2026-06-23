@@ -129,11 +129,21 @@ class PlayerCommands(commands.Cog):
     @commands.command(name="rich")
     @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def rich(self, ctx):
+        # ดึง ID ของเจ้าของเซิร์ฟเวอร์
+        owner_id = ctx.guild.owner_id 
+        
         with self.get_db() as cursor:
-            cursor.execute("SELECT user_id, (bank + cash) as total FROM players ORDER BY total DESC LIMIT 10")
+            # เพิ่ม WHERE user_id != ? เพื่อยกเว้นเจ้าของเซิร์ฟเวอร์
+            cursor.execute("""
+                SELECT user_id, (bank + cash) as total 
+                FROM players 
+                WHERE user_id != ? 
+                ORDER BY total DESC 
+                LIMIT 10
+            """, (owner_id,))
             rows = cursor.fetchall()
         
-        msg = "🏆 **10 อันดับมหาเศรษฐี** 🏆\n"
+        msg = "🏆 **10 อันดับมหาเศรษฐี (ไม่รวมเจ้าของเซิร์ฟ)** 🏆\n"
         for i, (uid, total) in enumerate(rows, 1):
             name = await self.get_user_name(uid)
             msg += f"{i}. **{name}**: `{total:,}` ทอง\n"
@@ -143,11 +153,21 @@ class PlayerCommands(commands.Cog):
     @commands.command(name="toplvl")
     @allowed_channels(["🏦ธนาคารกลาง🏦"])
     async def toplvl(self, ctx):
+        # ดึง ID ของเจ้าของเซิร์ฟเวอร์
+        owner_id = ctx.guild.owner_id 
+        
         with self.get_db() as cursor:
-            cursor.execute("SELECT user_id, level, exp FROM players ORDER BY level DESC, exp DESC LIMIT 10")
+            # เพิ่ม WHERE user_id != ? เพื่อยกเว้นเจ้าของเซิร์ฟเวอร์
+            cursor.execute("""
+                SELECT user_id, level, exp 
+                FROM players 
+                WHERE user_id != ? 
+                ORDER BY level DESC, exp DESC 
+                LIMIT 10
+            """, (owner_id,))
             rows = cursor.fetchall()
 
-        msg = "⚔️ **10 อันดับผู้กล้าเลเวลสูง** ⚔️\n"
+        msg = "⚔️ **10 อันดับผู้กล้าเลเวลสูง (ไม่รวมเจ้าของเซิร์ฟ)** ⚔️\n"
         for i, (uid, lvl, exp) in enumerate(rows, 1):
             name = await self.get_user_name(uid)
             msg += f"{i}. **{name}**: เลเวล `{lvl}` (EXP: `{exp}`)\n"
