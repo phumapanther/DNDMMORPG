@@ -202,7 +202,7 @@ class BJ24Game(commands.Cog):
             self.bot_brain = None
             print(f"[ERROR] [BJ24_INIT] ⚠️ โหลด AlphaBot ไม่สำเร็จ: {e}")
 
-    @allowed_channels(["🃏Blackjack🃏"]) # 🛠️ ใช้ Decorator บล็อกห้อง
+    @allowed_channels(["🃏blackjack🃏"]) # 🛠️ ใช้ Decorator บล็อกห้อง
     @not_arrested() # 🛠️ บล็อกคนติดคุก
     @commands.command(name="bj")
     async def play_bj(self, ctx, bet: int):
