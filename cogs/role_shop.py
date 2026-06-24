@@ -14,10 +14,10 @@ DARK_ROLES = [
     {"label": "• Asmodeus🕯️", "value": "asmo", "price": 20000000, "role_id": 1160576018508152912, "emoji": "🕯️"},
     {"label": "• Beelzebub 🪰", "value": "beel", "price": 20000000, "role_id": 1160577870251425965, "emoji": "🪰"},
     {"label": "• Mammon 🪙", "value": "mammon", "price": 20000000, "role_id": 1160576329079595079, "emoji": "🪙"},
-    {"label": "• Belphegor 🦥", "value": "belphe", "price": 20000000, "role_id": 1510346403044655124, "emoji": None},
-    {"label": "• Satan 𖤐", "value": "satan", "price": 20000000, "role_id": 1510346894558105680, "emoji": None},
+    {"label": "• Belphegor 🦥", "value": "belphe", "price": 20000000, "role_id": 1510346403044655124, "emoji": "🐌"},
+    {"label": "• Satan 𖤐", "value": "satan", "price": 20000000, "role_id": 1510346894558105680, "emoji": "🔯"},
     {"label": "• Leviathan 🐍", "value": "levi", "price": 20000000, "role_id": 1510347065492901918, "emoji": "🐍"},
-    {"label": "• Lucifer ⸸", "value": "luci", "price": 20000000, "role_id": 1510347144207401140, "emoji": None},
+    {"label": "• Lucifer ⸸", "value": "luci", "price": 20000000, "role_id": 1510347144207401140, "emoji": "✝️"},
 ]
 
 # ==========================================
